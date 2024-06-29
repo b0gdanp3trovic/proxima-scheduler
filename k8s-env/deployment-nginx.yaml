@@ -4,7 +4,7 @@ kind: Pod
 metadata:
   name: test-pod-nginx
 spec:
-  schedulerName: custom-scheduler
+  schedulerName: proxima-scheduler
   containers:
-  - name: example-container
+  - name: nginx-container
     image: nginx
