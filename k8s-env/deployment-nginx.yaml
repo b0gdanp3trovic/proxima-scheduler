@@ -1,0 +1,10 @@
+# test-pod.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: test-pod-nginx
+spec:
+  schedulerName: custom-scheduler
+  containers:
+  - name: example-container
+    image: nginx
