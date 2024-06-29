@@ -51,7 +51,7 @@ func main() {
 		cache.ResourceEventHandlerFuncs{
 			AddFunc: func(obj interface{}) {
 				pod := obj.(*v1.Pod)
-				if pod.GetLabels()["scheduled"] != "true" {
+				if pod.Spec.SchedulerName == "proxima-scheduler" && pod.Spec.NodeName == "" {
 					schedulePod(clientset, pod)
 				}
 			},
