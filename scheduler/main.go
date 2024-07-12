@@ -37,6 +37,8 @@ func main() {
 		panic(err.Error())
 	}
 
+	fmt.Printf("Successfully configured.\n")
+
 	podListWatcher := cache.NewListWatchFromClient(
 		clientset.CoreV1().RESTClient(),
 		"pods",
@@ -73,6 +75,8 @@ func schedulePod(clientset *kubernetes.Clientset, pod *v1.Pod) {
 		fmt.Printf("Error listing nodes: %v\n", err)
 		return
 	}
+
+	fmt.Println(nodes)
 
 	if len(nodes.Items) == 0 {
 		fmt.Println("No nodes available")
