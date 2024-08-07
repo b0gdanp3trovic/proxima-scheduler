@@ -23,14 +23,16 @@ func SchedulePod(clientset *kubernetes.Clientset, pod *v1.Pod) {
 		return
 	}
 
-	// TODO: implement
-	selectedNode := nodes.Items[0].Name
-	fmt.Printf("Scheduling pod %s to node %s\n", pod.GetName(), selectedNode)
-
-	bindPodToNode(clientset, pod, selectedNode)
+	selectedNode := selectNodeBasedOnCapacity(clientset, nodes, pod)
+	if selectedNode != nil {
+		fmt.Printf("Scheduling pod %s to node %s\n", pod.GetName(), *selectedNode)
+		// Bind the pod to the selected node
+		fmt.Printf("Scheduling pod %s to node %s\n", pod.GetName(), selectedNode)
+		bindPodToNode(clientset, pod, selectedNode)
+	}
 }
 
-func bindPodToNode(clientset *kubernetes.Clientset, pod *v1.Pod, nodeName string) {
+func bindPodToNode(clientset *kubernetes.Clientset, pod *v1.Pod, nodeName *string) {
 	binding := &v1.Binding{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: pod.Namespace,
@@ -39,7 +41,7 @@ func bindPodToNode(clientset *kubernetes.Clientset, pod *v1.Pod, nodeName string
 		},
 		Target: v1.ObjectReference{
 			Kind: "Node",
-			Name: nodeName,
+			Name: *nodeName,
 		},
 	}
 
