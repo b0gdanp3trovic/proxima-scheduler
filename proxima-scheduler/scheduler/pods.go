@@ -27,7 +27,6 @@ func SchedulePod(clientset *kubernetes.Clientset, pod *v1.Pod) {
 	if selectedNode != nil {
 		fmt.Printf("Scheduling pod %s to node %s\n", pod.GetName(), *selectedNode)
 		// Bind the pod to the selected node
-		fmt.Printf("Scheduling pod %s to node %s\n", pod.GetName(), selectedNode)
 		bindPodToNode(clientset, pod, selectedNode)
 	}
 }
