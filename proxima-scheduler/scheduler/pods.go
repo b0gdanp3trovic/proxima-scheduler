@@ -47,5 +47,8 @@ func bindPodToNode(clientset *kubernetes.Clientset, pod *v1.Pod, nodeName *strin
 	err := clientset.CoreV1().Pods(pod.Namespace).Bind(context.TODO(), binding, metav1.CreateOptions{})
 	if err != nil {
 		fmt.Printf("Error binding pod: %v\n", err)
+		return
 	}
+
+	fmt.Printf("Successfully scheduled pod %s to node %s:", pod.GetName(), *nodeName)
 }
