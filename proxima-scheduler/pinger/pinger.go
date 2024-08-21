@@ -2,6 +2,7 @@ package pinger
 
 import (
 	"fmt"
+	"log"
 	"net"
 	"time"
 )
@@ -11,14 +12,16 @@ type Pinger struct {
 	Latencies map[string]time.Duration
 	Interval  time.Duration
 	stopChan  chan struct{}
+	DB        Database
 }
 
-func NewPinger(addresses []string, interval time.Duration) *Pinger {
+func NewPinger(addresses []string, interval time.Duration, db Database) *Pinger {
 	return &Pinger{
 		Addr:      addresses,
 		Latencies: make(map[string]time.Duration),
 		Interval:  interval,
 		stopChan:  make(chan struct{}),
+		DB:        db,
 	}
 }
 
@@ -48,6 +51,22 @@ func (p Pinger) PingAll() {
 		conn.Close()
 		p.Latencies[address] = time.Since(start)
 	}
+
+	p.DB.SavePingTime(p.Latencies)
+}
+
+func (p *Pinger) SaveLatenciesToDB(latencies map[string]time.Duration) {
+	if len(latencies) == 0 {
+		log.Printf("Empty latencies table, nothing to save.")
+		return
+	}
+
+	if err := p.DB.SavePingTime(latencies); err != nil {
+		log.Printf("Failed to save latencies to the database.")
+		return
+	}
+	// Clear latencies map
+	p.Latencies = nil
 }
 
 func (p *Pinger) Run() {
@@ -63,6 +82,7 @@ func (p *Pinger) Run() {
 
 			case <-p.stopChan:
 				fmt.Print("Stopping pinger.")
+				p.DB.SavePingTime(p.Latencies)
 				return
 			}
 		}
