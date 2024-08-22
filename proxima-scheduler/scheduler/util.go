@@ -20,16 +20,12 @@ func discoverNodes(clientset *kubernetes.Clientset) (*v1.NodeList, error) {
 }
 
 // Primarily used to provide formatted data to a Pinger instance
-func extractNodeAddresses(nodes []v1.Node, formatAddresses bool) []string {
+func extractNodeAddresses(nodes []v1.Node) []string {
 	var addresses []string
 	for _, node := range nodes {
 		for _, addr := range node.Status.Addresses {
 			if addr.Type == v1.NodeInternalIP {
-				if formatAddresses {
-					addresses = append(addresses, addr.Address+":80")
-				} else {
-					addresses = append(addresses, addr.Address)
-				}
+				addresses = append(addresses, addr.Address+":80")
 			}
 		}
 	}
