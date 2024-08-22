@@ -11,7 +11,7 @@ import (
 )
 
 func SchedulePod(clientset *kubernetes.Clientset, pod *v1.Pod) {
-	nodes, err := clientset.CoreV1().Nodes().List(context.TODO(), metav1.ListOptions{})
+	nodes, err := discoverNodes(clientset)
 
 	if err != nil {
 		fmt.Printf("Error listing nodes: %v\n", err)
