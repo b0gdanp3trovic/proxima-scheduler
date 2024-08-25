@@ -1,4 +1,4 @@
-package scheduler
+package util
 
 import (
 	"context"
@@ -9,7 +9,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 )
 
-func discoverNodes(clientset *kubernetes.Clientset) (*v1.NodeList, error) {
+func DiscoverNodes(clientset *kubernetes.Clientset) (*v1.NodeList, error) {
 	nodes, err := clientset.CoreV1().Nodes().List(context.TODO(), metav1.ListOptions{})
 	if err != nil {
 		log.Fatalf("Failed to list nodes: %v", err)
@@ -20,7 +20,7 @@ func discoverNodes(clientset *kubernetes.Clientset) (*v1.NodeList, error) {
 }
 
 // Primarily used to provide formatted data to a Pinger instance
-func extractNodeAddresses(nodes []v1.Node) []string {
+func ExtractNodeAddresses(nodes []v1.Node) []string {
 	var addresses []string
 	for _, node := range nodes {
 		for _, addr := range node.Status.Addresses {

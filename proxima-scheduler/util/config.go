@@ -4,14 +4,16 @@ import (
 	"log"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 )
 
 type Config struct {
-	InfluxDBAddress string
-	DatabaseName    string
-	DatabaseEnabled bool
-	PingInterval    time.Duration
+	InfluxDBAddress    string
+	DatabaseName       string
+	DatabaseEnabled    bool
+	PingInterval       time.Duration
+	IncludedNamespaces []string
 }
 
 func LoadConfig() *Config {
@@ -19,12 +21,14 @@ func LoadConfig() *Config {
 	databaseName := getEnv("INFLUXDB_DB_NAME", "ping_db")
 	databaseEnabled := getEnvAsBool("DATABASE_ENABLED", true)
 	pingInterval := getEnvAsDuration("PING_INTERVAL", 10*time.Second)
+	includedNamespaces := parseIncludedNamespaces("INCLUDED_NAMESPACES", []string{"default"})
 
 	return &Config{
-		InfluxDBAddress: influxDBAddress,
-		DatabaseName:    databaseName,
-		DatabaseEnabled: databaseEnabled,
-		PingInterval:    pingInterval,
+		InfluxDBAddress:    influxDBAddress,
+		DatabaseName:       databaseName,
+		DatabaseEnabled:    databaseEnabled,
+		PingInterval:       pingInterval,
+		IncludedNamespaces: includedNamespaces,
 	}
 }
 
@@ -60,4 +64,19 @@ func getEnvAsDuration(name string, defaultVal time.Duration) time.Duration {
 		return defaultVal
 	}
 	return val
+}
+
+func parseIncludedNamespaces(name string, defaultVal []string) []string {
+	valStr := getEnv(name, "")
+	if valStr == "" {
+		return defaultVal
+	}
+	return strings.Split(valStr, ",")
+}
+
+func HomeDir() string {
+	if h := os.Getenv("HOME"); h != "" {
+		return h
+	}
+	return os.Getenv("USERPROFILE")
 }
