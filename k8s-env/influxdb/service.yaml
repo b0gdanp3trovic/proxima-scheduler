@@ -1,0 +1,6 @@
+  type: NodePort
+  ports:
+    - protocol: TCP
+      port: 8086
+      targetPort: 8086
+      nodePort: 32000

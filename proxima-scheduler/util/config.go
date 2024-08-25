@@ -1,4 +1,4 @@
-package pinger
+package util
 
 import (
 	"log"
@@ -7,20 +7,20 @@ import (
 	"time"
 )
 
-type PingerConfig struct {
+type Config struct {
 	InfluxDBAddress string
 	DatabaseName    string
 	DatabaseEnabled bool
 	PingInterval    time.Duration
 }
 
-func LoadConfig() *PingerConfig {
+func LoadConfig() *Config {
 	influxDBAddress := getEnv("INFLUXDB_ADDRESS", "http://localhost:8086")
 	databaseName := getEnv("INFLUXDB_DB_NAME", "ping_db")
 	databaseEnabled := getEnvAsBool("DATABASE_ENABLED", true)
 	pingInterval := getEnvAsDuration("PING_INTERVAL", 10*time.Second)
 
-	return &PingerConfig{
+	return &Config{
 		InfluxDBAddress: influxDBAddress,
 		DatabaseName:    databaseName,
 		DatabaseEnabled: databaseEnabled,

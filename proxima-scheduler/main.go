@@ -35,7 +35,12 @@ func main() {
 		panic(err.Error())
 	}
 
-	fmt.Printf("Successfully configured.\n")
+	fmt.Printf("Connection to cluster successfully configured.\n")
+
+	//err = godotenv.Load()
+	//cfg := util.LoadConfig()
+	//
+	//fmt.Printf("Pinger successfully configured.\n")
 
 	podListWatcher := cache.NewListWatchFromClient(
 		clientset.CoreV1().RESTClient(),
