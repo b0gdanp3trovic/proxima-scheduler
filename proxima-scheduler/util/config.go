@@ -14,6 +14,7 @@ type Config struct {
 	DatabaseEnabled    bool
 	PingInterval       time.Duration
 	IncludedNamespaces []string
+	SchedulerName      string
 }
 
 func LoadConfig() *Config {
@@ -22,6 +23,7 @@ func LoadConfig() *Config {
 	databaseEnabled := getEnvAsBool("DATABASE_ENABLED", true)
 	pingInterval := getEnvAsDuration("PING_INTERVAL", 10*time.Second)
 	includedNamespaces := parseIncludedNamespaces("INCLUDED_NAMESPACES", []string{"default"})
+	schedulerName := getEnv("SCHEDULER_NAME", "proxima-scheduler")
 
 	return &Config{
 		InfluxDBAddress:    influxDBAddress,
@@ -29,6 +31,7 @@ func LoadConfig() *Config {
 		DatabaseEnabled:    databaseEnabled,
 		PingInterval:       pingInterval,
 		IncludedNamespaces: includedNamespaces,
+		SchedulerName:      schedulerName,
 	}
 }
 

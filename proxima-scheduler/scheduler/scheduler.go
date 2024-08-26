@@ -17,12 +17,14 @@ import (
 
 type Scheduler struct {
 	Clientset          *kubernetes.Clientset
+	SchedulerName      string
 	IncludedNamespaces []string
 }
 
-func NewScheduler(includedNamespaces []string) (*Scheduler, error) {
+func NewScheduler(schedulerName string, includedNamespaces []string) (*Scheduler, error) {
 	s := &Scheduler{
 		IncludedNamespaces: includedNamespaces,
+		SchedulerName:      schedulerName,
 	}
 
 	clientset, err := s.configure()
@@ -49,7 +51,7 @@ func (s *Scheduler) Run() {
 		cache.ResourceEventHandlerFuncs{
 			AddFunc: func(obj interface{}) {
 				pod := obj.(*v1.Pod)
-				if pod.Spec.SchedulerName == "proxima-scheduler" && pod.Spec.NodeName == "" {
+				if pod.Spec.SchedulerName == s.SchedulerName && pod.Spec.NodeName == "" {
 					s.schedulePod(s.Clientset, pod)
 				}
 			},
