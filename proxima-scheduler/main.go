@@ -11,7 +11,7 @@ import (
 
 func main() {
 	cfg := util.LoadConfig()
-	scheduler, err := scheduler.NewScheduler(cfg.IncludedNamespaces)
+	scheduler, err := scheduler.NewScheduler(cfg.SchedulerName, cfg.IncludedNamespaces)
 
 	if err != nil {
 		log.Fatalf("Failed to create scheduler: %v", err)
