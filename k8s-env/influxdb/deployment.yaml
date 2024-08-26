@@ -4,6 +4,7 @@ metadata:
   name: influxdb
   labels:
     app: influxdb
+  namespace: influx
 spec:
   replicas: 1
   selector:

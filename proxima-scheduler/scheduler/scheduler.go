@@ -130,5 +130,5 @@ func (s *Scheduler) bindPodToNode(clientset *kubernetes.Clientset, pod *v1.Pod, 
 		return
 	}
 
-	fmt.Printf("Successfully scheduled pod %s to node %s.", pod.GetName(), *nodeName)
+	fmt.Printf("Successfully scheduled pod %s to node %s.\n", pod.GetName(), *nodeName)
 }

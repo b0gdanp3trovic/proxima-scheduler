@@ -1,4 +1,6 @@
   type: NodePort
+  metadata:
+    namespace: influx
   ports:
     - protocol: TCP
       port: 8086
