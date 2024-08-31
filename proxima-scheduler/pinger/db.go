@@ -11,18 +11,20 @@ type Database interface {
 }
 
 type InfluxDB struct {
-	Client client.Client
+	DatabaseName string
+	Client       client.Client
 }
 
-func NewInfluxDB(client client.Client) *InfluxDB {
+func NewInfluxDB(client client.Client, databaseName string) *InfluxDB {
 	return &InfluxDB{
-		Client: client,
+		DatabaseName: databaseName,
+		Client:       client,
 	}
 }
 
 func (db *InfluxDB) SavePingTime(latencies map[string]time.Duration) error {
 	bp, err := client.NewBatchPoints(client.BatchPointsConfig{
-		Database:  "ping_db",
+		Database:  db.DatabaseName,
 		Precision: "s",
 	})
 
