@@ -23,8 +23,9 @@ func main() {
 	fmt.Println("Scheduler successfully configured.")
 
 	// Start the scheduler
-	scheduler.Run()
+	go scheduler.Run()
 
+	fmt.Println("Run scheduler.")
 	// Initialize pinger DB
 	influxClient, err := client.NewHTTPClient(client.HTTPConfig{
 		Addr: cfg.InfluxDBAddress,
@@ -41,4 +42,7 @@ func main() {
 
 	// Start pinger
 	pinger.Run()
+
+	// Block the function from exiting
+	select {}
 }
