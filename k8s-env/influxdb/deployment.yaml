@@ -28,10 +28,10 @@ spec:
             limits:
               cpu: 200m
               memory: 256Mi
-          volumeMounts:
-            - name: influxdb-storage
-              mountPath: /var/lib/influxdb
-      volumes:
-        - name: influxdb-storage
-          persistentVolumeClaim:
-            claimName: influxdb-pvc
+#          volumeMounts:
+#            - name: influxdb-storage
+#              mountPath: /var/lib/influxdb
+#      volumes:
+#        - name: influxdb-storage
+#          persistentVolumeClaim:
+#            claimName: influxdb-pvc

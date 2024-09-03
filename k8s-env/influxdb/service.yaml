@@ -4,9 +4,10 @@ metadata:
   name: influxdb-service
   namespace: influx
 spec:
-  type: NodePort
+  type: ClusterIP
   ports:
     - protocol: TCP
       port: 8086
       targetPort: 8086
-      nodePort: 32000
+  selector:
+    app: influxdb
