@@ -3,6 +3,7 @@ package pinger
 import (
 	"fmt"
 	"log"
+	"sync"
 	"time"
 
 	"github.com/b0gdanp3trovic/proxima-scheduler/util"
@@ -18,6 +19,7 @@ type Pinger struct {
 	DBEnabled bool
 	DB        Database
 	Clientset *kubernetes.Clientset
+	mu        sync.Mutex
 }
 
 func NewPinger(interval time.Duration, clientset *kubernetes.Clientset, dbEnabled bool, db Database) (*Pinger, error) {
@@ -35,11 +37,17 @@ func NewPinger(interval time.Duration, clientset *kubernetes.Clientset, dbEnable
 }
 
 func (p *Pinger) AddAddress(address string) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
 	p.Addr[address] = struct{}{}
 	p.Latencies[address] = 0
 }
 
 func (p *Pinger) RemoveAddress(address string) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
 	delete(p.Addr, address)
 	delete(p.Latencies, address)
 }
@@ -71,25 +79,44 @@ func (p *Pinger) updateAddresses() {
 }
 
 func (p *Pinger) PingAll() {
+	var addresses []string
+
+	p.mu.Lock()
 	for address := range p.Addr {
-		// Bing pinger
+		addresses = append(addresses, address)
+	}
+	p.mu.Unlock()
+
+	for _, address := range addresses {
+		// Bing pinger instance
 		pinger, err := bing.NewPinger(address)
+
+		// Windows support
+		pinger.SetPrivileged(true)
+
 		if err != nil {
 			fmt.Printf("Failed to create pinger for %s: %v\n", address, err)
+			p.mu.Lock()
 			p.Latencies[address] = -1
+			p.mu.Unlock()
 			continue
 		}
 
 		pinger.Count = 1
 		pinger.Timeout = 2 * time.Second
+
 		err = pinger.Run()
 		if err != nil {
 			fmt.Printf("Failed to ping %s: %v\n", address, err)
+			p.mu.Lock()
 			p.Latencies[address] = -1
+			p.mu.Unlock()
 			continue
 		}
 
 		stats := pinger.Statistics()
+
+		p.mu.Lock()
 		if stats.PacketsRecv > 0 {
 			p.Latencies[address] = stats.AvgRtt
 			fmt.Printf("Ping to %s: %v\n", address, stats.AvgRtt)
@@ -97,6 +124,7 @@ func (p *Pinger) PingAll() {
 			p.Latencies[address] = -1
 			fmt.Printf("Ping to %s failed: No packets received\n", address)
 		}
+		p.mu.Unlock()
 	}
 
 	if p.DBEnabled {
@@ -120,9 +148,6 @@ func (p *Pinger) SaveLatenciesToDB() {
 	} else {
 		fmt.Println("Successfully saved latencies to the database.")
 	}
-
-	// Clear latencies map
-	p.Latencies = nil
 }
 
 func (p *Pinger) Run() {
