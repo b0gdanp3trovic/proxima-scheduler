@@ -19,19 +19,14 @@ type Scheduler struct {
 	StopCh             chan struct{}
 }
 
-func NewScheduler(schedulerName string, includedNamespaces []string) (*Scheduler, error) {
+func NewScheduler(schedulerName string, includedNamespaces []string, clientset *kubernetes.Clientset) (*Scheduler, error) {
 	s := &Scheduler{
+		Clientset:          clientset,
 		IncludedNamespaces: includedNamespaces,
 		SchedulerName:      schedulerName,
 		StopCh:             make(chan struct{}),
 	}
 
-	clientset, err := util.GetClientset()
-	if err != nil {
-		return nil, err
-	}
-
-	s.Clientset = clientset
 	return s, nil
 }
 

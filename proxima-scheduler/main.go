@@ -13,7 +13,14 @@ import (
 
 func main() {
 	cfg := util.LoadConfig()
-	scheduler, err := scheduler.NewScheduler(cfg.SchedulerName, cfg.IncludedNamespaces)
+	clientset, err := util.GetClientset()
+
+	if err != nil {
+		log.Fatalf("Failed to obtain clientset: %v", err)
+		os.Exit(1)
+	}
+
+	scheduler, err := scheduler.NewScheduler(cfg.SchedulerName, cfg.IncludedNamespaces, clientset)
 
 	if err != nil {
 		log.Fatalf("Failed to create scheduler: %v", err)
@@ -38,7 +45,7 @@ func main() {
 
 	influxDb := pinger.NewInfluxDB(influxClient, cfg.DatabaseName)
 
-	pinger, err := pinger.NewPinger(cfg.PingInterval, cfg.DatabaseEnabled, influxDb)
+	pinger, err := pinger.NewPinger(cfg.PingInterval, clientset, cfg.DatabaseEnabled, influxDb)
 
 	// Start pinger
 	pinger.Run()

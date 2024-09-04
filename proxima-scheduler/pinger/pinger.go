@@ -20,7 +20,7 @@ type Pinger struct {
 	Clientset *kubernetes.Clientset
 }
 
-func NewPinger(interval time.Duration, dbEnabled bool, db Database) (*Pinger, error) {
+func NewPinger(interval time.Duration, clientset *kubernetes.Clientset, dbEnabled bool, db Database) (*Pinger, error) {
 	p := &Pinger{
 		Addr:      make(map[string]struct{}),
 		Latencies: make(map[string]time.Duration),
@@ -28,14 +28,9 @@ func NewPinger(interval time.Duration, dbEnabled bool, db Database) (*Pinger, er
 		stopChan:  make(chan struct{}),
 		DBEnabled: dbEnabled,
 		DB:        db,
+		Clientset: clientset,
 	}
 
-	clientset, err := util.GetClientset()
-	if err != nil {
-		return nil, err
-	}
-
-	p.Clientset = clientset
 	return p, nil
 }
 
