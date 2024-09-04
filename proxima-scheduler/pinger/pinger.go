@@ -3,10 +3,10 @@ package pinger
 import (
 	"fmt"
 	"log"
-	"net"
 	"time"
 
 	"github.com/b0gdanp3trovic/proxima-scheduler/util"
+	bing "github.com/prometheus-community/pro-bing"
 	"k8s.io/client-go/kubernetes"
 )
 
@@ -53,7 +53,7 @@ func (p *Pinger) updateAddresses() {
 
 	currentNodes := make(map[string]struct{})
 	for _, node := range nodes.Items {
-		address := fmt.Sprintf("%s:80", node.Status.Addresses[0].Address)
+		address := node.Status.Addresses[0].Address
 		currentNodes[address] = struct{}{}
 
 		if _, exists := p.Addr[address]; !exists {
@@ -72,20 +72,36 @@ func (p *Pinger) updateAddresses() {
 
 func (p *Pinger) PingAll() {
 	for address := range p.Addr {
-		start := time.Now()
-		conn, err := net.Dial("tcp", address)
-
+		// Bing pinger
+		pinger, err := bing.NewPinger(address)
 		if err != nil {
+			fmt.Printf("Failed to create pinger for %s: %v\n", address, err)
 			p.Latencies[address] = -1
-			fmt.Printf("Failed to ping %s\n", address)
 			continue
 		}
 
-		conn.Close()
-		p.Latencies[address] = time.Since(start)
+		pinger.Count = 1
+		pinger.Timeout = 2 * time.Second
+		err = pinger.Run()
+		if err != nil {
+			fmt.Printf("Failed to ping %s: %v\n", address, err)
+			p.Latencies[address] = -1
+			continue
+		}
+
+		stats := pinger.Statistics()
+		if stats.PacketsRecv > 0 {
+			p.Latencies[address] = stats.AvgRtt
+			fmt.Printf("Ping to %s: %v\n", address, stats.AvgRtt)
+		} else {
+			p.Latencies[address] = -1
+			fmt.Printf("Ping to %s failed: No packets received\n", address)
+		}
 	}
 
-	p.DB.SavePingTime(p.Latencies)
+	if p.DBEnabled {
+		p.SaveLatenciesToDB()
+	}
 }
 
 func (p *Pinger) SaveLatenciesToDB() {
@@ -138,7 +154,9 @@ func (p *Pinger) Run() {
 			case <-p.stopChan:
 				fmt.Println("Stopping pinger.")
 				// Save any remaining latencies before stopping
-				p.SaveLatenciesToDB()
+				if p.DBEnabled {
+					p.SaveLatenciesToDB()
+				}
 				return
 			}
 		}
