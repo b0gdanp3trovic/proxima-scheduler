@@ -2,7 +2,6 @@ package util
 
 import (
 	"context"
-	"flag"
 	"fmt"
 	"log"
 	"path/filepath"
@@ -10,30 +9,39 @@ import (
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 )
 
 func GetClientset() (*kubernetes.Clientset, error) {
-	var kubeconfig *string
-	if home := HomeDir(); home != "" {
-		kubeconfig = flag.String("kubeconfig", filepath.Join(home, ".kube", "config"), "(optional) absolute path to the kubeconfig file")
-	} else {
-		kubeconfig = flag.String("kubeconfig", "", "absolute path to the kubeconfig file")
+	config, err := rest.InClusterConfig()
+	if err == nil {
+		clientset, err := kubernetes.NewForConfig(config)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create clientset using in-cluster config: %w", err)
+		}
+		fmt.Println("Detected running inside the Kubernetes cluster")
+		return clientset, nil
 	}
 
-	flag.Parse()
+	fmt.Println("Detected running outside the Kubernetes cluster, trying to load kubeconfig")
+	home := HomeDir()
+	if home == "" {
+		return nil, fmt.Errorf("home directory not found")
+	}
 
-	config, err := clientcmd.BuildConfigFromFlags("", *kubeconfig)
+	kubeconfig := filepath.Join(home, ".kube", "config")
+	config, err = clientcmd.BuildConfigFromFlags("", kubeconfig)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build kubeconfig: %w", err)
 	}
 
 	clientset, err := kubernetes.NewForConfig(config)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create Kubernetes clientset: %w", err)
+		return nil, fmt.Errorf("failed to create clientset using kubeconfig: %w", err)
 	}
 
-	fmt.Println("Connection to cluster successfully configured.")
+	fmt.Println("Connection to cluster successfully configured using kubeconfig")
 	return clientset, nil
 }
 
