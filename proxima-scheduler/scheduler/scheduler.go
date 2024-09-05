@@ -31,31 +31,33 @@ func NewScheduler(schedulerName string, includedNamespaces []string, clientset *
 }
 
 func (s *Scheduler) Run() {
-	go func() {
-		podListWatcher := cache.NewListWatchFromClient(
-			s.Clientset.CoreV1().RESTClient(),
-			"pods",
-			v1.NamespaceAll,
-			fields.Everything(),
-		)
+	for _, ns := range s.IncludedNamespaces {
+		go func(namespace string) {
+			podListWatcher := cache.NewListWatchFromClient(
+				s.Clientset.CoreV1().RESTClient(),
+				"pods",
+				namespace,
+				fields.Everything(),
+			)
 
-		_, controller := cache.NewInformer(
-			podListWatcher,
-			&v1.Pod{},
-			0,
-			cache.ResourceEventHandlerFuncs{
-				AddFunc: func(obj interface{}) {
-					pod := obj.(*v1.Pod)
-					if pod.Spec.SchedulerName == s.SchedulerName && pod.Spec.NodeName == "" {
-						s.schedulePod(s.Clientset, pod)
-					}
+			_, controller := cache.NewInformer(
+				podListWatcher,
+				&v1.Pod{},
+				0,
+				cache.ResourceEventHandlerFuncs{
+					AddFunc: func(obj interface{}) {
+						pod := obj.(*v1.Pod)
+						if pod.Spec.SchedulerName == s.SchedulerName && pod.Spec.NodeName == "" {
+							s.schedulePod(s.Clientset, pod)
+						}
+					},
 				},
-			},
-		)
+			)
 
-		// Start the controller in the goroutine
-		controller.Run(s.StopCh)
-	}()
+			// Start the controller in the goroutine
+			controller.Run(s.StopCh)
+		}(ns)
+	}
 }
 
 func (s *Scheduler) schedulePod(clientset *kubernetes.Clientset, pod *v1.Pod) {
