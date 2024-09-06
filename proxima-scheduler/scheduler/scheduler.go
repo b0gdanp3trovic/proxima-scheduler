@@ -48,7 +48,7 @@ func (s *Scheduler) Run() {
 					AddFunc: func(obj interface{}) {
 						pod := obj.(*v1.Pod)
 						if pod.Spec.SchedulerName == s.SchedulerName && pod.Spec.NodeName == "" {
-							s.schedulePod(s.Clientset, pod)
+							s.schedulePod(pod)
 						}
 					},
 				},
@@ -60,8 +60,8 @@ func (s *Scheduler) Run() {
 	}
 }
 
-func (s *Scheduler) schedulePod(clientset *kubernetes.Clientset, pod *v1.Pod) {
-	nodes, err := util.DiscoverNodes(clientset)
+func (s *Scheduler) schedulePod(pod *v1.Pod) {
+	nodes, err := util.DiscoverNodes(s.Clientset)
 
 	if err != nil {
 		fmt.Printf("Error listing nodes: %v\n", err)
@@ -73,11 +73,11 @@ func (s *Scheduler) schedulePod(clientset *kubernetes.Clientset, pod *v1.Pod) {
 		return
 	}
 
-	selectedNode := selectNodeBasedOnCapacity(clientset, nodes, pod)
+	selectedNode := selectNodeBasedOnCapacity(s.Clientset, nodes, pod)
 	if selectedNode != nil {
 		fmt.Printf("Scheduling pod %s to node %s\n", pod.GetName(), *selectedNode)
 		// Bind the pod to the selected node
-		s.bindPodToNode(clientset, pod, selectedNode)
+		s.bindPodToNode(s.Clientset, pod, selectedNode)
 	}
 }
 

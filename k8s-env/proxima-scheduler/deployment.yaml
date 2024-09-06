@@ -1,0 +1,42 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: proxima-scheduler
+  namespace: proxima-scheduler
+  labels:
+    app: proxima-scheduler
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: proxima-scheduler
+  template:
+    metadata:
+      labels:
+        app: proxima-scheduler
+    spec:
+      containers:
+      - name: proxima-scheduler
+        image: bogdanb0gdan/proxima-scheduler:latest
+        imagePullPolicy: Always
+        resources:
+          limits:
+            cpu: "500m"
+            memory: "256Mi"
+          requests:
+            cpu: "250m"
+            memory: "128Mi"
+        env:
+        - name: SCHEDULER_NAME
+          value: "proxima-scheduler"
+        - name: DATABASE_ENABLED
+          value: "true"
+        - name: PING_INTERVAL
+          value: "10s"
+        - name: INCLUDED_NAMESPACES
+          value: "default"
+        - name: INFLUXDB_ADDRESS
+          value: "http://influxdb-service.influx.svc.cluster.local:8086"
+      serviceAccountName: proxima-scheduler-sa
+      restartPolicy: Always
+

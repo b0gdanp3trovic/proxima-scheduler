@@ -1,0 +1,42 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: proxima-scheduler-role
+  labels:
+    app: proxima-scheduler
+rules:
+  # list and get nodes
+  - apiGroups: [""]
+    resources: ["nodes"]
+    verbs: ["list", "get"]
+
+  # bind pods to nodes
+  - apiGroups: [""]
+    resources: ["pods/binding"]
+    verbs: ["create"]
+
+  # update pod status (after binding)
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["update"]
+    resourceNames: ["status"]
+  
+  # watch pods
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["list", "get", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: proxima-scheduler-binding
+  labels:
+    app: proxima-scheduler
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: proxima-scheduler-role
+subjects:
+  - kind: ServiceAccount
+    name: proxima-scheduler-sa
+    namespace: proxima-scheduler
