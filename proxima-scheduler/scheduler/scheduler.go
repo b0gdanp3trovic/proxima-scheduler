@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/b0gdanp3trovic/proxima-scheduler/pinger"
 	"github.com/b0gdanp3trovic/proxima-scheduler/util"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -17,14 +18,16 @@ type Scheduler struct {
 	SchedulerName      string
 	IncludedNamespaces []string
 	StopCh             chan struct{}
+	DB                 pinger.Database
 }
 
-func NewScheduler(schedulerName string, includedNamespaces []string, clientset *kubernetes.Clientset) (*Scheduler, error) {
+func NewScheduler(schedulerName string, includedNamespaces []string, clientset *kubernetes.Clientset, db pinger.Database) (*Scheduler, error) {
 	s := &Scheduler{
 		Clientset:          clientset,
 		IncludedNamespaces: includedNamespaces,
 		SchedulerName:      schedulerName,
 		StopCh:             make(chan struct{}),
+		DB:                 db,
 	}
 
 	return s, nil
@@ -73,7 +76,14 @@ func (s *Scheduler) schedulePod(pod *v1.Pod) {
 		return
 	}
 
-	selectedNode := selectNodeBasedOnCapacity(s.Clientset, nodes, pod)
+	// TODO: enable config option for the logic behind selecting nodes
+	// selectedNode := selectNodeBasedOnCapacity(s.Clientset, nodes, pod)
+	selectedNode, err := selectNodeBasedOnLatency(s.Clientset, nodes, pod, s.DB)
+
+	if err != nil {
+		fmt.Printf("Error selecting node for pod %s: %v\n", pod.GetName(), err)
+	}
+
 	if selectedNode != nil {
 		fmt.Printf("Scheduling pod %s to node %s\n", pod.GetName(), *selectedNode)
 		// Bind the pod to the selected node

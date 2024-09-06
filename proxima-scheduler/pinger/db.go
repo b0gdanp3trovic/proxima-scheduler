@@ -1,6 +1,7 @@
 package pinger
 
 import (
+	"fmt"
 	"time"
 
 	client "github.com/influxdata/influxdb1-client/v2"
@@ -8,6 +9,7 @@ import (
 
 type Database interface {
 	SavePingTime(latencies map[string]time.Duration) error
+	GetAveragePingTime() (map[string]float64, error) // Add new method signature
 }
 
 type InfluxDB struct {
@@ -50,4 +52,36 @@ func (db *InfluxDB) SavePingTime(latencies map[string]time.Duration) error {
 	}
 
 	return db.Client.Write(bp)
+}
+
+func (db *InfluxDB) GetAveragePingTime() (map[string]float64, error) {
+	query := fmt.Sprintf(`
+		SELECT MEAN("latency_ms")
+		FROM "ping_times"
+		WHERE time > now() - 30s
+		GROUP BY "node"
+	`)
+
+	q := client.NewQuery(query, db.DatabaseName, "s")
+	response, err := db.Client.Query(q)
+	if err != nil {
+		return nil, err
+	}
+
+	if response.Error() != nil {
+		return nil, response.Error()
+	}
+
+	result := make(map[string]float64)
+	for _, row := range response.Results[0].Series {
+		node := row.Tags["node"]
+		if len(row.Values) > 0 {
+			meanLatency, ok := row.Values[0][1].(float64)
+			if ok {
+				result[node] = meanLatency
+			}
+		}
+	}
+
+	return result, nil
 }

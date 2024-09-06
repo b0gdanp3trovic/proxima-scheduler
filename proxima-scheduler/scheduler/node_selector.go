@@ -2,7 +2,9 @@ package scheduler
 
 import (
 	"fmt"
+	"math"
 
+	"github.com/b0gdanp3trovic/proxima-scheduler/pinger"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/client-go/kubernetes"
@@ -20,6 +22,43 @@ func selectNodeBasedOnCapacity(clientset *kubernetes.Clientset, nodes *v1.NodeLi
 
 	fmt.Println("No suitable nodes available")
 	return nil
+}
+
+func selectNodeBasedOnLatency(clientset *kubernetes.Clientset, nodes *v1.NodeList, pod *v1.Pod, db pinger.Database) (*string, error) {
+	nodeLatencies, err := db.GetAveragePingTime()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get average ping times: %v", err)
+	}
+
+	var selectedNode *string
+	lowestLatency := math.MaxFloat64
+
+	for _, node := range nodes.Items {
+		nodeName := node.Name
+
+		latency, exists := nodeLatencies[nodeName]
+
+		// Node does not have latency data
+		if !exists {
+			continue
+		}
+
+		// Not does not have enough capacity
+		if !hasEnoughCapacity(clientset, &node, pod) {
+			continue
+		}
+
+		if latency < lowestLatency {
+			lowestLatency = latency
+			selectedNode = &nodeName
+		}
+	}
+
+	if selectedNode == nil {
+		return nil, fmt.Errorf("no suitable node found for pod %s", pod.Name)
+	}
+
+	return selectedNode, nil
 }
 
 func hasEnoughCapacity(clientset *kubernetes.Clientset, node *v1.Node, pod *v1.Pod) bool {

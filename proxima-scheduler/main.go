@@ -20,7 +20,19 @@ func main() {
 		os.Exit(1)
 	}
 
-	scheduler, err := scheduler.NewScheduler(cfg.SchedulerName, cfg.IncludedNamespaces, clientset)
+	// Initialize latency DB
+	influxClient, err := client.NewHTTPClient(client.HTTPConfig{
+		Addr: cfg.InfluxDBAddress,
+	})
+
+	if err != nil {
+		log.Fatalf("Failed to initialize InfluxDB client: %v", err)
+		os.Exit(1)
+	}
+
+	influxDb := pinger.NewInfluxDB(influxClient, cfg.DatabaseName)
+
+	scheduler, err := scheduler.NewScheduler(cfg.SchedulerName, cfg.IncludedNamespaces, clientset, influxDb)
 
 	if err != nil {
 		log.Fatalf("Failed to create scheduler: %v", err)
@@ -33,17 +45,6 @@ func main() {
 	go scheduler.Run()
 
 	fmt.Println("Run scheduler.")
-	// Initialize pinger DB
-	influxClient, err := client.NewHTTPClient(client.HTTPConfig{
-		Addr: cfg.InfluxDBAddress,
-	})
-
-	if err != nil {
-		log.Fatalf("Failed to initialize InfluxDB client: %v", err)
-		os.Exit(1)
-	}
-
-	influxDb := pinger.NewInfluxDB(influxClient, cfg.DatabaseName)
 
 	pinger, err := pinger.NewPinger(cfg.PingInterval, clientset, cfg.DatabaseEnabled, influxDb)
 
