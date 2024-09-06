@@ -31,7 +31,9 @@ jobs:
         context: ./proxima-scheduler
         file: ./proxima-scheduler/Dockerfile
         push: true
-        tags: bogdanb0gdan/proxima-scheduler:latest
+        tags: |
+          bogdanb0gdan/proxima-scheduler:latest
+          bogdanb0gdan/proxima-scheduler:${{ github.sha }}
 
     - name: Docker Image Digest
       run: echo ${{ steps.build.outputs.digest }}
