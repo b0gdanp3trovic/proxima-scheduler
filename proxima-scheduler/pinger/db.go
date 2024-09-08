@@ -2,6 +2,7 @@ package pinger
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	client "github.com/influxdata/influxdb1-client/v2"
@@ -72,14 +73,20 @@ func (db *InfluxDB) GetAveragePingTime() (map[string]float64, error) {
 		return nil, response.Error()
 	}
 
+	fmt.Printf("Query Response: %+v\n", response)
+
 	result := make(map[string]float64)
 	for _, row := range response.Results[0].Series {
-		node := row.Tags["node"]
-		fmt.Printf("InfluxDB node name: %s\n", node) // Print InfluxDB node names
+		node := strings.TrimSpace(strings.ToLower(row.Tags["node"]))
+		fmt.Printf("InfluxDB node name: %s\n", node)
+
 		if len(row.Values) > 0 {
 			meanLatency, ok := row.Values[0][1].(float64)
 			if ok {
 				result[node] = meanLatency
+				fmt.Printf("Node: %s, Latency: %.2f ms\n", node, meanLatency)
+			} else {
+				fmt.Printf("Error converting latency for node: %s\n", node)
 			}
 		}
 	}
