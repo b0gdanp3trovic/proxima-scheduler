@@ -40,11 +40,13 @@ func selectNodeBasedOnLatency(clientset *kubernetes.Clientset, nodes *v1.NodeLis
 
 		// Node does not have latency data
 		if !exists {
+			fmt.Printf("Node %s does not have latency data, proceeding...", node.Name)
 			continue
 		}
 
 		// Not does not have enough capacity
 		if !hasEnoughCapacity(clientset, &node, pod) {
+			fmt.Printf("Node %s does not have enough capacity, proceeding...", node.Name)
 			continue
 		}
 
