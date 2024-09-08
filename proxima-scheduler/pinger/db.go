@@ -9,7 +9,7 @@ import (
 
 type Database interface {
 	SavePingTime(latencies map[string]time.Duration) error
-	GetAveragePingTime() (map[string]float64, error) // Add new method signature
+	GetAveragePingTime() (map[string]float64, error)
 }
 
 type InfluxDB struct {
