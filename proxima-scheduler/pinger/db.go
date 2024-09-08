@@ -2,6 +2,7 @@ package pinger
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -81,15 +82,25 @@ func (db *InfluxDB) GetAveragePingTime() (map[string]float64, error) {
 		fmt.Printf("InfluxDB node name: %s\n", node)
 
 		if len(row.Values) > 0 {
-			meanLatency, ok := row.Values[0][1].(float64)
-			if ok {
-				result[node] = meanLatency
-				fmt.Printf("Node: %s, Latency: %.2f ms\n", node, meanLatency)
-			} else {
-				fmt.Printf("Error converting latency for node: %s\n", node)
+			latencyInterface := row.Values[0][1]
+
+			latencyStr, ok := latencyInterface.(string)
+			if !ok {
+				fmt.Printf("Error converting latency for node: %s, expected string but got %T\n", node, latencyInterface)
+				continue
 			}
+
+			meanLatency, err := strconv.ParseFloat(latencyStr, 64)
+			if err != nil {
+				fmt.Printf("Error parsing latency for node: %s: %v\n", node, err)
+				continue
+			}
+
+			result[node] = meanLatency
+			fmt.Printf("Node: %s, Latency: %.2f ms\n", node, meanLatency)
 		}
 	}
 
 	return result, nil
+
 }
