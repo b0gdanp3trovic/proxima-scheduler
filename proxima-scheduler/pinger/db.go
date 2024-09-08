@@ -75,6 +75,7 @@ func (db *InfluxDB) GetAveragePingTime() (map[string]float64, error) {
 	result := make(map[string]float64)
 	for _, row := range response.Results[0].Series {
 		node := row.Tags["node"]
+		fmt.Printf("InfluxDB node name: %s\n", node) // Print InfluxDB node names
 		if len(row.Values) > 0 {
 			meanLatency, ok := row.Values[0][1].(float64)
 			if ok {
