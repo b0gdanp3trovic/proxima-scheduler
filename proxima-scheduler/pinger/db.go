@@ -1,6 +1,7 @@
 package pinger
 
 import (
+	"encoding/json"
 	"fmt"
 	"strconv"
 	"strings"
@@ -84,23 +85,33 @@ func (db *InfluxDB) GetAveragePingTime() (map[string]float64, error) {
 		if len(row.Values) > 0 {
 			latencyInterface := row.Values[0][1]
 
-			latencyStr, ok := latencyInterface.(string)
-			if !ok {
-				fmt.Printf("Error converting latency for node: %s, expected string but got %T\n", node, latencyInterface)
+			// Safely convert latency to float64
+			switch latencyInterface.(type) {
+			case float64:
+				result[node] = latencyInterface.(float64)
+			case string:
+				latencyStr := latencyInterface.(string)
+				latency, err := strconv.ParseFloat(latencyStr, 64)
+				if err != nil {
+					fmt.Printf("Error parsing latency for node %s: %v\n", node, err)
+					continue
+				}
+				result[node] = latency
+			case json.Number:
+				latency, err := latencyInterface.(json.Number).Float64()
+				if err != nil {
+					fmt.Printf("Error converting latency for node %s: %v\n", node, err)
+					continue
+				}
+				result[node] = latency
+			default:
+				fmt.Printf("Unexpected type for latency value on node %s: %T\n", node, latencyInterface)
 				continue
 			}
 
-			meanLatency, err := strconv.ParseFloat(latencyStr, 64)
-			if err != nil {
-				fmt.Printf("Error parsing latency for node: %s: %v\n", node, err)
-				continue
-			}
-
-			result[node] = meanLatency
-			fmt.Printf("Node: %s, Latency: %.2f ms\n", node, meanLatency)
+			fmt.Printf("Node: %s, Latency: %.2f ms\n", node, result[node])
 		}
 	}
 
 	return result, nil
-
 }
