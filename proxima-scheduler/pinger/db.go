@@ -75,12 +75,9 @@ func (db *InfluxDB) GetAveragePingTime() (map[string]float64, error) {
 		return nil, response.Error()
 	}
 
-	fmt.Printf("Query Response: %+v\n", response)
-
 	result := make(map[string]float64)
 	for _, row := range response.Results[0].Series {
 		node := strings.TrimSpace(strings.ToLower(row.Tags["node"]))
-		fmt.Printf("InfluxDB node name: %s\n", node)
 
 		if len(row.Values) > 0 {
 			latencyInterface := row.Values[0][1]
@@ -108,8 +105,6 @@ func (db *InfluxDB) GetAveragePingTime() (map[string]float64, error) {
 				fmt.Printf("Unexpected type for latency value on node %s: %T\n", node, latencyInterface)
 				continue
 			}
-
-			fmt.Printf("Node: %s, Latency: %.2f ms\n", node, result[node])
 		}
 	}
 

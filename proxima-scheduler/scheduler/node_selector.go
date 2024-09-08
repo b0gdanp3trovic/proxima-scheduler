@@ -35,15 +35,12 @@ func selectNodeBasedOnLatency(clientset *kubernetes.Clientset, nodes *v1.NodeLis
 
 	for _, node := range nodes.Items {
 		nodeAddress := node.Status.Addresses[0].Address
-		fmt.Printf("Kubernetes node name: %s\n", nodeAddress)
 
 		latency, exists := nodeLatencies[nodeAddress]
 		if !exists {
 			fmt.Printf("Node %s does not have latency data, proceeding...\n", nodeAddress)
 			continue
 		}
-
-		fmt.Printf("Node %s has latency: %.2f ms\n", nodeAddress, latency)
 
 		if !hasEnoughCapacity(clientset, &node, pod) {
 			fmt.Printf("Node %s does not have enough capacity, proceeding...\n", nodeAddress)
