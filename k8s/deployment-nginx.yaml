@@ -2,7 +2,7 @@
 apiVersion: v1
 kind: Pod
 metadata:
-  name: test-pod-nginx
+  name: test-pod-nginx1
 spec:
   schedulerName: proxima-scheduler
   containers:
