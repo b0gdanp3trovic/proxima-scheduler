@@ -55,8 +55,8 @@ jobs:
     - name: Build and Push Labeler Docker Image
       uses: docker/build-push-action@v4
       with:
-        context: ./labeler
-        file: ./labeler/Dockerfile
+        context: ./proxima-scheduler/labeler
+        file: ./proxima-scheduler/labeler
         push: true
         tags: |
           bogdanb0gdan/labeler:latest
