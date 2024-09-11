@@ -2,6 +2,7 @@ apiVersion: apps/v1
 kind: DaemonSet
 metadata:
   name: labeler
+  namespace: proxima-scheduler
   labels:
     app: labeler
 spec:
@@ -13,6 +14,7 @@ spec:
       labels:
         app: labeler
     spec:
+      serviceAccountName: labeler-sa
       containers:
       - name: labeler
         image: bogdanb0gdan/labeler:latest
