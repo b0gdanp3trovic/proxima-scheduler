@@ -28,14 +28,12 @@ jobs:
       uses: docker/build-push-action@v4
       with:
         context: ./proxima-scheduler
-        file: ./proxima-scheduler/Dockerfile
+        file: ./proxima-scheduler/Dockerfile.scheduler
         push: true
         tags: |
           bogdanb0gdan/proxima-scheduler:latest
           bogdanb0gdan/proxima-scheduler:${{ github.sha }}
 
-    - name: Docker Image Digest
-      run: echo ${{ steps.build.outputs.digest }}
 
   build-labeler:
     runs-on: ubuntu-latest
@@ -55,12 +53,9 @@ jobs:
     - name: Build and Push Labeler Docker Image
       uses: docker/build-push-action@v4
       with:
-        context: ./proxima-scheduler/labeler
-        file: ./proxima-scheduler/labeler/Dockerfile
+        context: ./proxima-scheduler
+        file: ./proxima-scheduler/Dockerfile.labeler
         push: true
         tags: |
           bogdanb0gdan/labeler:latest
           bogdanb0gdan/labeler:${{ github.sha }}
-
-    - name: Docker Image Digest
-      run: echo ${{ steps.build.outputs.digest }}
