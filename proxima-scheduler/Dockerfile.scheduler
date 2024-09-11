@@ -7,6 +7,6 @@ RUN go mod download
 
 COPY . .
 
-RUN go build -o /proxima-scheduler ./cmd/proxima-scheduler
+RUN go build -o /proxima-scheduler ./cmd/scheduler
 
 CMD ["/proxima-scheduler"]
