@@ -7,6 +7,6 @@ RUN go mod download
 
 COPY . .
 
-RUN go build -o /labeler ./cmd/labeler
+RUN go build -o /pinger ./cmd/pinger
 
-CMD ["/labeler"]
+CMD ["/pinger"]
