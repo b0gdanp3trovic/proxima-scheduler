@@ -37,6 +37,8 @@ func (ep *EdgeProxy) latencyMiddleware(next http.Handler) http.Handler {
 
 func (ep *EdgeProxy) Run() {
 	go func() {
+		log.Println("Edge proxy server is starting on port 8080...")
+
 		// Use the proxy with latency middleware
 		http.Handle("/", ep.latencyMiddleware(ep.proxy))
 

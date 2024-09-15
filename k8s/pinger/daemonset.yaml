@@ -1,24 +1,32 @@
 apiVersion: apps/v1
-kind: Deployment
+kind: DaemonSet
 metadata:
-  name: proxima-scheduler
+  name: pinger
   namespace: proxima-scheduler
   labels:
-    app: proxima-scheduler
+    app: pinger
 spec:
-  replicas: 1
   selector:
     matchLabels:
-      app: proxima-scheduler
+      app: pinger
   template:
     metadata:
       labels:
-        app: proxima-scheduler
+        app: pinger
     spec:
+      tolerations:
+      - key: "dedicated"
+        operator: "Equal"
+        value: "edge"
+        effect: "NoSchedule"
+      nodeSelector:
+        edge: "true"
+      nodeSelector:
+        edge: "true"
       containers:
-      - name: proxima-scheduler
+      - name: pinger
         image: bogdanb0gdan/proxima-scheduler:latest
-        command: ["/proxima-scheduler"]
+        command: ["/pinger"]
         imagePullPolicy: Always
         resources:
           limits:
@@ -28,8 +36,6 @@ spec:
             cpu: "250m"
             memory: "128Mi"
         env:
-        - name: SCHEDULER_NAME
-          value: "proxima-scheduler"
         - name: DATABASE_ENABLED
           value: "true"
         - name: PING_INTERVAL
@@ -38,6 +44,5 @@ spec:
           value: "default"
         - name: INFLUXDB_ADDRESS
           value: "http://influxdb-service.influx.svc.cluster.local:8086"
-      serviceAccountName: proxima-scheduler-sa
+      serviceAccountName: pinger-sa
       restartPolicy: Always
-

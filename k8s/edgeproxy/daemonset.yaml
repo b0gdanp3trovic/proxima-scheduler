@@ -1,0 +1,40 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: edgeproxy
+  namespace: proxima-scheduler
+  labels:
+    app: edgeproxy
+spec:
+  selector:
+    matchLabels:
+      app: edgeproxy
+  template:
+    metadata:
+      labels:
+        app: edgeproxy
+    spec:
+      tolerations:
+      - key: "dedicated"
+        operator: "Equal"
+        value: "edge"
+        effect: "NoSchedule"
+      nodeSelector:
+        edge: "true"
+      nodeSelector:
+        edge: "true"
+      containers:
+      - name: edgeproxy
+        image: bogdanb0gdan/proxima-scheduler:latest
+        command: ["/edgeproxy"]
+        imagePullPolicy: Always
+        resources:
+          limits:
+            cpu: "500m"
+            memory: "256Mi"
+          requests:
+            cpu: "250m"
+            memory: "128Mi"
+        env:
+      serviceAccountName: edgeproxy-sa
+      restartPolicy: Always
