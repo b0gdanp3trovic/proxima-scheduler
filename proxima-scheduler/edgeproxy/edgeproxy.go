@@ -15,6 +15,9 @@ type EdgeProxy struct {
 func NewEdgeProxy() *EdgeProxy {
 	return &EdgeProxy{
 		proxy: &httputil.ReverseProxy{
+			Director: func(req *http.Request) {
+				log.Printf("Forwarding request to %s", req.URL.String())
+			},
 			ModifyResponse: func(resp *http.Response) error {
 				// Measure latency and log it
 				latency := time.Since(resp.Request.Context().Value("start_time").(time.Time))
