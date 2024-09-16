@@ -2,6 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: test-flask-service-deployment
+  namespace: default
 spec:
   replicas: 2
   selector:
@@ -12,6 +13,7 @@ spec:
       labels:
         app: test-flask-service
     spec:
+      schedulerName: proxima-scheduler
       containers:
       - name: test-flask-service-container
         image: bogdanb0gdan/test-flask-service:latest
