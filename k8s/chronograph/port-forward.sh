@@ -1,0 +1,1 @@
+kubectl port-forward svc/chronograf-service 8888:8888 -n influx

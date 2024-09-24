@@ -4,11 +4,10 @@ metadata:
   name: chronograf-service
   namespace: influx
 spec:
-  type: NodePort
+  type: ClusterIP
   ports:
     - protocol: TCP
       port: 8888
       targetPort: 8888
-      nodePort: 32001
   selector:
     app: chronograf
