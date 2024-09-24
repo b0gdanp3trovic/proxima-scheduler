@@ -1,6 +1,7 @@
 package util
 
 import (
+	"fmt"
 	"log"
 	"os"
 	"strconv"
@@ -15,15 +16,38 @@ type Config struct {
 	PingInterval       time.Duration
 	IncludedNamespaces []string
 	SchedulerName      string
+	NodeIP             string
 }
 
-func LoadConfig() *Config {
-	influxDBAddress := getEnv("INFLUXDB_ADDRESS", "http://localhost:8086")
-	databaseName := getEnv("INFLUXDB_DB_NAME", "ping_db")
+func LoadConfig() (*Config, error) {
+	influxDBAddress, err := getEnvOrFail("INFLUXDB_ADDRESS")
+	if err != nil {
+		return nil, err
+	}
+
+	databaseName, err := getEnvOrFail("INFLUXDB_DB_NAME")
+	if err != nil {
+		return nil, err
+	}
+
 	databaseEnabled := getEnvAsBool("DATABASE_ENABLED", true)
+
 	pingInterval := getEnvAsDuration("PING_INTERVAL", 10*time.Second)
-	includedNamespaces := parseIncludedNamespaces("INCLUDED_NAMESPACES", []string{"default"})
-	schedulerName := getEnv("SCHEDULER_NAME", "proxima-scheduler")
+
+	includedNamespaces, err := parseIncludedNamespaces("INCLUDED_NAMESPACES", []string{"default"})
+	if err != nil {
+		return nil, err
+	}
+
+	schedulerName, err := getEnvOrFail("SCHEDULER_NAME")
+	if err != nil {
+		return nil, err
+	}
+
+	nodeIP, err := getEnvOrFail("NODE_IP")
+	if err != nil {
+		return nil, err
+	}
 
 	return &Config{
 		InfluxDBAddress:    influxDBAddress,
@@ -32,7 +56,16 @@ func LoadConfig() *Config {
 		PingInterval:       pingInterval,
 		IncludedNamespaces: includedNamespaces,
 		SchedulerName:      schedulerName,
+		NodeIP:             nodeIP, // Assign Node IP to the config
+	}, nil
+}
+
+func getEnvOrFail(key string) (string, error) {
+	value, exists := os.LookupEnv(key)
+	if !exists || value == "" {
+		return "", fmt.Errorf("required environment variable %s is not set or empty", key)
 	}
+	return value, nil
 }
 
 func getEnv(key string, defaultValue string) string {
@@ -69,12 +102,15 @@ func getEnvAsDuration(name string, defaultVal time.Duration) time.Duration {
 	return val
 }
 
-func parseIncludedNamespaces(name string, defaultVal []string) []string {
-	valStr := getEnv(name, "")
-	if valStr == "" {
-		return defaultVal
+func parseIncludedNamespaces(name string, defaultVal []string) ([]string, error) {
+	valStr, err := getEnvOrFail(name)
+	if err != nil {
+		return nil, err
 	}
-	return strings.Split(valStr, ",")
+	if valStr == "" {
+		return defaultVal, nil
+	}
+	return strings.Split(valStr, ","), nil
 }
 
 func HomeDir() string {

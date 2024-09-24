@@ -12,7 +12,11 @@ import (
 )
 
 func main() {
-	cfg := util.LoadConfig()
+	cfg, err := util.LoadConfig()
+	if err != nil {
+		log.Fatalf("Error loading config: %v", err)
+	}
+
 	clientset, err := util.GetClientset()
 
 	if err != nil {

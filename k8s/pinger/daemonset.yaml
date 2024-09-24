@@ -13,7 +13,7 @@ spec:
     metadata:
       labels:
         app: pinger
-    spec:
+     spec:
       tolerations:
       - key: "dedicated"
         operator: "Equal"
@@ -36,6 +36,10 @@ spec:
             cpu: "250m"
             memory: "128Mi"
         env:
+        - name: NODE_IP
+          valueFrom:
+            fieldRef:
+              fieldPath: status.hostIP
         - name: DATABASE_ENABLED
           value: "true"
         - name: PING_INTERVAL

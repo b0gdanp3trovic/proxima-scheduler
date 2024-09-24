@@ -10,7 +10,11 @@ import (
 )
 
 func main() {
-	cfg := util.LoadConfig()
+	cfg, err := util.LoadConfig()
+	if err != nil {
+		log.Fatalf("Error loading config: %v", err)
+	}
+
 	clientset, err := util.GetClientset()
 
 	if err != nil {
@@ -30,7 +34,7 @@ func main() {
 
 	influxDb := pinger.NewInfluxDB(influxClient, cfg.DatabaseName)
 
-	pinger, err := pinger.NewPinger(cfg.PingInterval, clientset, cfg.DatabaseEnabled, influxDb)
+	pinger, err := pinger.NewPinger(cfg.PingInterval, clientset, cfg.DatabaseEnabled, influxDb, cfg.NodeIP)
 
 	// Start pinger
 	pinger.Run()

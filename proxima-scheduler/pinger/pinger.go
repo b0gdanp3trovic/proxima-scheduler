@@ -20,9 +20,10 @@ type Pinger struct {
 	DB        Database
 	Clientset *kubernetes.Clientset
 	mu        sync.Mutex
+	NodeIP    string
 }
 
-func NewPinger(interval time.Duration, clientset *kubernetes.Clientset, dbEnabled bool, db Database) (*Pinger, error) {
+func NewPinger(interval time.Duration, clientset *kubernetes.Clientset, dbEnabled bool, db Database, nodeIP string) (*Pinger, error) {
 	p := &Pinger{
 		Addr:      make(map[string]struct{}),
 		Latencies: make(map[string]time.Duration),
@@ -31,6 +32,7 @@ func NewPinger(interval time.Duration, clientset *kubernetes.Clientset, dbEnable
 		DBEnabled: dbEnabled,
 		DB:        db,
 		Clientset: clientset,
+		NodeIP:    nodeIP,
 	}
 
 	return p, nil
@@ -62,6 +64,16 @@ func (p *Pinger) updateAddresses() {
 	currentNodes := make(map[string]struct{})
 	for _, node := range nodes.Items {
 		address := node.Status.Addresses[0].Address
+
+		/*
+		   The node hosting the pinger is designated as an "edge" node.
+		   We always ensure to skip these nodes, as we want to ping only
+		   core or non-edge nodes.
+		*/
+		if address == p.NodeIP {
+			continue
+		}
+
 		currentNodes[address] = struct{}{}
 
 		if _, exists := p.Addr[address]; !exists {
