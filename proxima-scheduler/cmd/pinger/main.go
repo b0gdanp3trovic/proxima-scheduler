@@ -10,10 +10,7 @@ import (
 )
 
 func main() {
-	cfg, err := util.LoadConfig()
-	if err != nil {
-		log.Fatalf("Error loading config: %v", err)
-	}
+	cfg := util.LoadConfig()
 
 	clientset, err := util.GetClientset()
 
