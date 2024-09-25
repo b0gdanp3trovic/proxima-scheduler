@@ -71,6 +71,7 @@ func (p *Pinger) updateAddresses() {
 		   core or non-edge nodes.
 		*/
 		if address == p.NodeIP {
+			fmt.Printf("Skipping node %s, as it is detected as a host node.\n", p.NodeIP)
 			continue
 		}
 
