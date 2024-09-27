@@ -21,8 +21,6 @@ spec:
         effect: "NoSchedule"
       nodeSelector:
         edge: "true"
-      nodeSelector:
-        edge: "true"
       containers:
       - name: pinger
         image: bogdanb0gdan/proxima-scheduler:latest

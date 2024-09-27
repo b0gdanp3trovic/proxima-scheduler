@@ -21,8 +21,6 @@ spec:
         effect: "NoSchedule"
       nodeSelector:
         edge: "true"
-      nodeSelector:
-        edge: "true"
       containers:
       - name: edgeproxy
         image: bogdanb0gdan/proxima-scheduler:latest
