@@ -1,0 +1,3 @@
+connectInject:
+  enabled: true
+  default: true
