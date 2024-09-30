@@ -1,3 +1,8 @@
 connectInject:
   enabled: true
-  default: true
+
+controller:
+  enabled: true
+
+syncCatalog:
+  enabled: true
