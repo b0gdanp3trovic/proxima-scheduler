@@ -16,6 +16,7 @@ type Config struct {
 	IncludedNamespaces []string
 	SchedulerName      string
 	NodeIP             string
+	ConsulURL          string
 }
 
 func LoadConfig() *Config {
@@ -26,6 +27,7 @@ func LoadConfig() *Config {
 	includedNamespaces := parseIncludedNamespaces("INCLUDED_NAMESPACES", []string{"default"})
 	schedulerName := getEnv("SCHEDULER_NAME", "proxima-scheduler")
 	nodeIP := getEnv("NODE_IP", "")
+	consulURL := getEnv("CONSUL_URL", "")
 
 	return &Config{
 		InfluxDBAddress:    influxDBAddress,
@@ -35,6 +37,7 @@ func LoadConfig() *Config {
 		IncludedNamespaces: includedNamespaces,
 		SchedulerName:      schedulerName,
 		NodeIP:             nodeIP,
+		ConsulURL:          consulURL,
 	}
 }
 
