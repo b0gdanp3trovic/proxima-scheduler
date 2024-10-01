@@ -4,10 +4,9 @@ metadata:
   name: edgeproxy-service
   namespace: default
 spec:
-  type: NodePort
+  type: LoadBalancer
   ports:
-    - port: 80
-      targetPort: 8080
-      nodePort: 30080 
+    - port: 80          # The port exposed by the LoadBalancer (external port)
+      targetPort: 8080   # The port on the container where the traffic will be directed
   selector:
     app: edgeproxy
