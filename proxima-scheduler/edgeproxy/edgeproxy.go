@@ -28,6 +28,7 @@ func NewEdgeProxy(consulAddress string) *EdgeProxy {
 	return &EdgeProxy{
 		proxy: &httputil.ReverseProxy{
 			Director: func(req *http.Request) {
+				log.Println("Got a request")
 				// Set start time in the request context
 				ctx := context.WithValue(req.Context(), "start_time", time.Now())
 				req = req.WithContext(ctx)

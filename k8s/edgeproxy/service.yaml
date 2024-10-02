@@ -2,11 +2,11 @@ apiVersion: v1
 kind: Service
 metadata:
   name: edgeproxy-service
-  namespace: default
+  namespace: proxima-scheduler
 spec:
   type: LoadBalancer
   ports:
-    - port: 80          # The port exposed by the LoadBalancer (external port)
-      targetPort: 8080   # The port on the container where the traffic will be directed
+    - port: 80
+      targetPort: 8080
   selector:
     app: edgeproxy

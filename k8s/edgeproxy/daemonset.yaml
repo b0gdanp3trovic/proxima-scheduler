@@ -33,6 +33,8 @@ spec:
           requests:
             cpu: "250m"
             memory: "128Mi"
+        ports:
+          - containerPort: 8080
         env:
       serviceAccountName: edgeproxy-sa
       restartPolicy: Always
