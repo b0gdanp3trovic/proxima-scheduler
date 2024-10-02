@@ -89,7 +89,6 @@ func preprocessRequest(next http.Handler) http.Handler {
 
 		ctx = context.WithValue(ctx, "start_time", time.Now())
 
-		// Pass the request to the next handler (the proxy)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
@@ -99,10 +98,8 @@ func (ep *EdgeProxy) Run() {
 	go func() {
 		log.Println("Edge proxy server is starting on port 8080...")
 
-		// Set up the HTTP handler to use the proxy
 		http.Handle("/", preprocessRequest(ep.proxy))
 
-		// Start listening and serving on port 8080
 		err := http.ListenAndServe(":8080", nil)
 		if err != nil {
 			log.Fatalf("Error starting proxy server: %v", err)
