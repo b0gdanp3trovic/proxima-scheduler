@@ -36,5 +36,7 @@ spec:
         ports:
           - containerPort: 8080
         env:
+        - name: CONSUL_URL
+          value: "http://consul-consul-service.consul"
       serviceAccountName: edgeproxy-sa
       restartPolicy: Always
