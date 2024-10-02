@@ -28,23 +28,13 @@ func NewEdgeProxy(consulAddress string) *EdgeProxy {
 	return &EdgeProxy{
 		proxy: &httputil.ReverseProxy{
 			Director: func(req *http.Request) {
-				serviceName := req.Context().Value("service_name").(string)
-
-				pods, err := getServicePodsFromConsul(serviceName, consulAddress)
-				if err != nil || len(pods) == 0 {
-					log.Printf("Failed to get service instances from Consul: %v", err)
-					req.URL.Host = ""
-					return
-				}
-
-				pod := pods[0]
+				podUrl := req.Context().Value("pod_url").(string)
 
 				// Forward the request to the pod
 				req.URL.Scheme = "http"
-				req.URL.Host = fmt.Sprintf("%s:%d", pod.Service.Address, pod.Service.Port)
-				log.Printf("Forwarding request to %s:%d", pod.Service.Address, pod.Service.Port)
+				req.URL.Host = podUrl
+				log.Printf("Forwarding request to %s", podUrl)
 			},
-
 			ModifyResponse: func(resp *http.Response) error {
 				// Measure latency and log it
 				latency := time.Since(resp.Request.Context().Value("start_time").(time.Time))
@@ -77,7 +67,7 @@ func getServicePodsFromConsul(serviceName string, consulURL string) ([]ConsulSer
 	return pods, nil
 }
 
-func preprocessRequest(next http.Handler) http.Handler {
+func preprocessRequest(consulAddress string, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		parts := strings.Split(r.URL.Path, "/")
 		if len(parts) < 2 || parts[1] == "" {
@@ -85,7 +75,18 @@ func preprocessRequest(next http.Handler) http.Handler {
 			return
 		}
 
-		ctx := context.WithValue(r.Context(), "service_name", parts[1])
+		serviceName := parts[1]
+
+		pods, err := getServicePodsFromConsul(serviceName, consulAddress)
+		if err != nil || len(pods) == 0 {
+			http.Error(w, "Failed to obtain pods from Consul", http.StatusInternalServerError)
+			return
+		}
+
+		pod := pods[0]
+		podUrl := fmt.Sprintf("%s:%d", pod.Service.Address, pod.Service.Port)
+
+		ctx := context.WithValue(r.Context(), "pod_url", podUrl)
 
 		ctx = context.WithValue(ctx, "start_time", time.Now())
 
@@ -98,7 +99,7 @@ func (ep *EdgeProxy) Run() {
 	go func() {
 		log.Println("Edge proxy server is starting on port 8080...")
 
-		http.Handle("/", preprocessRequest(ep.proxy))
+		http.Handle("/", preprocessRequest(ep.consulAddress, ep.proxy))
 
 		err := http.ListenAndServe(":8080", nil)
 		if err != nil {
