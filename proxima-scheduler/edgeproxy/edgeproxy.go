@@ -30,6 +30,12 @@ func NewEdgeProxy(consulAddress string) *EdgeProxy {
 			Director: func(req *http.Request) {
 				podUrl := req.Context().Value("pod_url").(string)
 
+				// Adjust the path
+				parts := strings.Split(req.URL.Path, "/")
+				if len(parts) > 2 {
+					req.URL.Path = "/" + strings.Join(parts[2:], "/")
+				}
+
 				// Forward the request to the pod
 				req.URL.Scheme = "http"
 				req.URL.Host = podUrl
@@ -80,7 +86,6 @@ func preprocessRequest(consulAddress string, next http.Handler) http.Handler {
 
 		pods, err := getServicePodsFromConsul(serviceName, consulAddress)
 		if err != nil || len(pods) == 0 {
-			log.Println(err)
 			http.Error(w, "Failed to obtain pods from Consul", http.StatusInternalServerError)
 			return
 		}
