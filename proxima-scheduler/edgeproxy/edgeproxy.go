@@ -98,7 +98,7 @@ func (ep *EdgeProxy) Run() {
 	// Start the proxy server in a goroutine
 	go func() {
 		log.Println("Edge proxy server is starting on port 8080...")
-		log.Println("Consul instance on %s...", ep.consulAddress)
+		log.Printf("Consul instance on %s...", ep.consulAddress)
 		http.Handle("/", preprocessRequest(ep.consulAddress, ep.proxy))
 
 		err := http.ListenAndServe(":8080", nil)
