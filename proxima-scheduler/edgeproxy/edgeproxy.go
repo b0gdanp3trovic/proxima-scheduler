@@ -43,6 +43,7 @@ func NewEdgeProxy(consulAddress string) *EdgeProxy {
 				return nil
 			},
 		},
+		consulAddress: consulAddress,
 	}
 }
 
