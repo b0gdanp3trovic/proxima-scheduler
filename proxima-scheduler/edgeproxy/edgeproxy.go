@@ -32,8 +32,12 @@ func NewEdgeProxy(consulAddress string) *EdgeProxy {
 
 				// Adjust the path
 				parts := strings.Split(req.URL.Path, "/")
-				if len(parts) > 2 {
+				if len(parts) >= 2 {
+					// Path is like '/service/endpoint/...', forward it as '/endpoint/...'
 					req.URL.Path = "/" + strings.Join(parts[2:], "/")
+				} else {
+					// Path is just '/service', forward it as '/'
+					req.URL.Path = "/"
 				}
 
 				// Forward the request to the pod
