@@ -79,6 +79,7 @@ func preprocessRequest(consulAddress string, next http.Handler) http.Handler {
 
 		pods, err := getServicePodsFromConsul(serviceName, consulAddress)
 		if err != nil || len(pods) == 0 {
+			log.Println(err)
 			http.Error(w, "Failed to obtain pods from Consul", http.StatusInternalServerError)
 			return
 		}
@@ -87,7 +88,6 @@ func preprocessRequest(consulAddress string, next http.Handler) http.Handler {
 		podUrl := fmt.Sprintf("%s:%d", pod.Service.Address, pod.Service.Port)
 
 		ctx := context.WithValue(r.Context(), "pod_url", podUrl)
-
 		ctx = context.WithValue(ctx, "start_time", time.Now())
 
 		next.ServeHTTP(w, r.WithContext(ctx))
