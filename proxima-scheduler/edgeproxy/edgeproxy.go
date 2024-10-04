@@ -14,8 +14,9 @@ import (
 
 type ConsulServiceInstance struct {
 	Service struct {
-		Address string `json:"Address"`
-		Port    int    `json:"Port"`
+		Address string            `json:"Address"`
+		Port    int               `json:"Port"`
+		Meta    map[string]string `json:"Meta"`
 	} `json:"Service"`
 }
 
@@ -96,14 +97,21 @@ func preprocessRequest(consulAddress string, next http.Handler) http.Handler {
 
 		pod := pods[0]
 		podUrl := fmt.Sprintf("%s:%d", pod.Service.Address, pod.Service.Port)
+		nodeIP, exists := pod.Service.Meta["node_ip"]
+		if !exists {
+			http.Error(w, "node_ip not found in service metadata", http.StatusInternalServerError)
+			return
+		}
 
 		ctx := context.WithValue(r.Context(), "pod_url", podUrl)
+		ctx = context.WithValue(ctx, "node_ip", nodeIP)
 		ctx = context.WithValue(ctx, "start_time", time.Now())
+
+		log.Printf("Forwarding request to pod %s on node %s", podUrl, nodeIP)
 
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
-
 func (ep *EdgeProxy) Run() {
 	// Start the proxy server in a goroutine
 	go func() {
