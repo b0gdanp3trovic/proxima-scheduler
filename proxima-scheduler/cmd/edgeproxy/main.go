@@ -6,10 +6,19 @@ import (
 )
 
 func main() {
+	// Load config
 	cfg := util.LoadConfig()
-	edgeProxy := edgeproxy.NewEdgeProxy(cfg.ConsulURL)
 
+	// Create a LatencyWorker with a buffer size of 100
+	latencyWorker := edgeproxy.NewLatencyWorker(100)
+
+	// Start the LatencyWorker in a separate goroutine
+	latencyWorker.Start()
+
+	// Create and run EdgeProxy, passing the latency worker
+	edgeProxy := edgeproxy.NewEdgeProxy(cfg.ConsulURL, latencyWorker)
 	edgeProxy.Run()
+
 	// Block the function from exiting
 	select {}
 }

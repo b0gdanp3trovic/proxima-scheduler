@@ -23,9 +23,10 @@ type ConsulServiceInstance struct {
 type EdgeProxy struct {
 	proxy         *httputil.ReverseProxy
 	consulAddress string
+	latencyChan   chan LatencyData
 }
 
-func NewEdgeProxy(consulAddress string) *EdgeProxy {
+func NewEdgeProxy(consulAddress string, worker *LatencyWorker) *EdgeProxy {
 	return &EdgeProxy{
 		proxy: &httputil.ReverseProxy{
 			Director: func(req *http.Request) {
@@ -49,8 +50,18 @@ func NewEdgeProxy(consulAddress string) *EdgeProxy {
 			ModifyResponse: func(resp *http.Response) error {
 				// Measure latency and log it
 				latency := time.Since(resp.Request.Context().Value("start_time").(time.Time))
-				println(latency)
-				// log latency
+				podUrl := resp.Request.Context().Value("pod_url").(string)
+				nodeIP := resp.Request.Context().Value("node_ip").(string)
+				serviceName := resp.Request.URL.Path
+
+				worker.SendLatencyData(LatencyData{
+					ServiceName: serviceName,
+					PodURL:      podUrl,
+					NodeIP:      nodeIP,
+					Latency:     latency,
+					Timestamp:   time.Now(),
+				})
+
 				return nil
 			},
 		},
@@ -112,6 +123,7 @@ func preprocessRequest(consulAddress string, next http.Handler) http.Handler {
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
+
 func (ep *EdgeProxy) Run() {
 	// Start the proxy server in a goroutine
 	go func() {
