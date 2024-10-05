@@ -1,6 +1,7 @@
 package edgeproxy
 
 import (
+	"fmt"
 	"log"
 	"time"
 
@@ -35,7 +36,12 @@ func (lw *LatencyWorker) Start() {
 	go func() {
 		for data := range lw.latencyChan {
 			log.Printf("Processing latency data: %v for pod: %s", data.Latency, data.PodURL)
-			lw.database.SaveRequestLatency(data.PodURL, data.NodeIP, lw.hostNodeIP, data.Latency)
+
+			if err := lw.database.SaveRequestLatency(data.PodURL, data.NodeIP, lw.hostNodeIP, data.Latency); err != nil {
+				log.Printf("Failed to save request latency to the database: %v", err)
+			} else {
+				fmt.Println("Successfully saved request latency to the database.")
+			}
 		}
 	}()
 }
