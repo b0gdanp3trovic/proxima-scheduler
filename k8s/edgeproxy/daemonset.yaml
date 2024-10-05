@@ -38,5 +38,11 @@ spec:
         env:
         - name: CONSUL_URL
           value: "http://consul-consul-server.consul:8500"
+        - name: DATABASE_ENABLED
+          value: "true"
+        - name: INFLUXDB_ADDRESS
+          value: "http://influxdb-service.influx.svc.cluster.local:8086"
+        - name: REQUST_LATENCY_INFLUXDB_DB_NAME
+          value: "request_latency_db"
       serviceAccountName: edgeproxy-sa
       restartPolicy: Always

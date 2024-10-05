@@ -9,19 +9,21 @@ import (
 )
 
 type Config struct {
-	InfluxDBAddress    string
-	DatabaseName       string
-	DatabaseEnabled    bool
-	PingInterval       time.Duration
-	IncludedNamespaces []string
-	SchedulerName      string
-	NodeIP             string
-	ConsulURL          string
+	InfluxDBAddress            string
+	DatabaseName               string
+	RequestLatencyDatabaseName string
+	DatabaseEnabled            bool
+	PingInterval               time.Duration
+	IncludedNamespaces         []string
+	SchedulerName              string
+	NodeIP                     string
+	ConsulURL                  string
 }
 
 func LoadConfig() *Config {
 	influxDBAddress := getEnv("INFLUXDB_ADDRESS", "http://localhost:8086")
 	databaseName := getEnv("INFLUXDB_DB_NAME", "ping_db")
+	requestLatencyDatabaseName := getEnv("REQUEST_LATENCY_INFLUX_DB_NAME", "request_latency_db")
 	databaseEnabled := getEnvAsBool("DATABASE_ENABLED", true)
 	pingInterval := getEnvAsDuration("PING_INTERVAL", 10*time.Second)
 	includedNamespaces := parseIncludedNamespaces("INCLUDED_NAMESPACES", []string{"default"})
@@ -30,14 +32,15 @@ func LoadConfig() *Config {
 	consulURL := getEnv("CONSUL_URL", "")
 
 	return &Config{
-		InfluxDBAddress:    influxDBAddress,
-		DatabaseName:       databaseName,
-		DatabaseEnabled:    databaseEnabled,
-		PingInterval:       pingInterval,
-		IncludedNamespaces: includedNamespaces,
-		SchedulerName:      schedulerName,
-		NodeIP:             nodeIP,
-		ConsulURL:          consulURL,
+		InfluxDBAddress:            influxDBAddress,
+		DatabaseName:               databaseName,
+		RequestLatencyDatabaseName: requestLatencyDatabaseName,
+		DatabaseEnabled:            databaseEnabled,
+		PingInterval:               pingInterval,
+		IncludedNamespaces:         includedNamespaces,
+		SchedulerName:              schedulerName,
+		NodeIP:                     nodeIP,
+		ConsulURL:                  consulURL,
 	}
 }
 

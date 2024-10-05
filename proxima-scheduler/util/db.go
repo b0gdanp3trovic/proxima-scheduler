@@ -13,6 +13,7 @@ import (
 type Database interface {
 	SavePingTime(latencies map[string]time.Duration) error
 	GetAveragePingTime() (map[string]float64, error)
+	SaveRequestLatency(podURL, nodeIP, edgeproxyNodeIP string, latency time.Duration) error
 }
 
 type InfluxDB struct {
@@ -26,7 +27,7 @@ func NewInfluxDB(client client.Client, databaseName string) *InfluxDB {
 		Client:       client,
 	}
 }
- 
+
 func (db *InfluxDB) SavePingTime(latencies map[string]time.Duration) error {
 	bp, err := client.NewBatchPoints(client.BatchPointsConfig{
 		Database:  db.DatabaseName,
@@ -53,6 +54,36 @@ func (db *InfluxDB) SavePingTime(latencies map[string]time.Duration) error {
 
 		bp.AddPoint(pt)
 	}
+
+	return db.Client.Write(bp)
+}
+
+func (db *InfluxDB) SaveRequestLatency(podURL, nodeIP, edgeproxyNodeIP string, latency time.Duration) error {
+	bp, err := client.NewBatchPoints(client.BatchPointsConfig{
+		Database:  db.DatabaseName,
+		Precision: "s",
+	})
+
+	if err != nil {
+		return err
+	}
+
+	tags := map[string]string{
+		"node":      nodeIP,
+		"pod":       podURL,
+		"edge_node": edgeproxyNodeIP,
+	}
+
+	fields := map[string]interface{}{
+		"latency_ms": latency.Seconds() * 1000,
+	}
+
+	pt, err := client.NewPoint("request_latency", tags, fields, time.Now())
+	if err != nil {
+		return err
+	}
+
+	bp.AddPoint(pt)
 
 	return db.Client.Write(bp)
 }

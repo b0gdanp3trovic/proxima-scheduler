@@ -1,21 +1,32 @@
 package main
 
 import (
+	"log"
+	"os"
+
 	"github.com/b0gdanp3trovic/proxima-scheduler/edgeproxy"
 	"github.com/b0gdanp3trovic/proxima-scheduler/util"
+	client "github.com/influxdata/influxdb1-client/v2"
 )
 
 func main() {
 	// Load config
 	cfg := util.LoadConfig()
 
-	// Create a LatencyWorker with a buffer size of 100
-	latencyWorker := edgeproxy.NewLatencyWorker(100)
+	influxClient, err := client.NewHTTPClient(client.HTTPConfig{
+		Addr: cfg.InfluxDBAddress,
+	})
 
-	// Start the LatencyWorker in a separate goroutine
+	if err != nil {
+		log.Fatalf("Failed to initialize InfluxDB client: %v", err)
+		os.Exit(1)
+	}
+
+	influxDb := util.NewInfluxDB(influxClient, cfg.DatabaseName)
+
+	latencyWorker := edgeproxy.NewLatencyWorker(100, influxDb, cfg.NodeIP)
 	latencyWorker.Start()
 
-	// Create and run EdgeProxy, passing the latency worker
 	edgeProxy := edgeproxy.NewEdgeProxy(cfg.ConsulURL, latencyWorker)
 	edgeProxy.Run()
 
