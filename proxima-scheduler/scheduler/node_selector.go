@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"math"
 
-	"github.com/b0gdanp3trovic/proxima-scheduler/pinger"
+	"github.com/b0gdanp3trovic/proxima-scheduler/util"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/client-go/kubernetes"
@@ -24,7 +24,7 @@ func selectNodeBasedOnCapacity(clientset *kubernetes.Clientset, nodes *v1.NodeLi
 	return nil
 }
 
-func selectNodeBasedOnLatency(clientset *kubernetes.Clientset, nodes *v1.NodeList, pod *v1.Pod, db pinger.Database) (*string, error) {
+func selectNodeBasedOnLatency(clientset *kubernetes.Clientset, nodes *v1.NodeList, pod *v1.Pod, db util.Database) (*string, error) {
 	nodeLatencies, err := db.GetAveragePingTime()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get average ping times: %v", err)

@@ -1,4 +1,4 @@
-package pinger
+package util
 
 import (
 	"encoding/json"
@@ -26,7 +26,7 @@ func NewInfluxDB(client client.Client, databaseName string) *InfluxDB {
 		Client:       client,
 	}
 }
-
+ 
 func (db *InfluxDB) SavePingTime(latencies map[string]time.Duration) error {
 	bp, err := client.NewBatchPoints(client.BatchPointsConfig{
 		Database:  db.DatabaseName,

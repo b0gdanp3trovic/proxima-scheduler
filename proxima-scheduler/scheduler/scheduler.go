@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/b0gdanp3trovic/proxima-scheduler/pinger"
 	"github.com/b0gdanp3trovic/proxima-scheduler/util"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -18,10 +17,10 @@ type Scheduler struct {
 	SchedulerName      string
 	IncludedNamespaces []string
 	StopCh             chan struct{}
-	DB                 pinger.Database
+	DB                 util.Database
 }
 
-func NewScheduler(schedulerName string, includedNamespaces []string, clientset *kubernetes.Clientset, db pinger.Database) (*Scheduler, error) {
+func NewScheduler(schedulerName string, includedNamespaces []string, clientset *kubernetes.Clientset, db util.Database) (*Scheduler, error) {
 	s := &Scheduler{
 		Clientset:          clientset,
 		IncludedNamespaces: includedNamespaces,

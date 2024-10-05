@@ -17,13 +17,13 @@ type Pinger struct {
 	Interval  time.Duration
 	stopChan  chan struct{}
 	DBEnabled bool
-	DB        Database
+	DB        util.Database
 	Clientset *kubernetes.Clientset
 	mu        sync.Mutex
 	NodeIP    string
 }
 
-func NewPinger(interval time.Duration, clientset *kubernetes.Clientset, dbEnabled bool, db Database, nodeIP string) (*Pinger, error) {
+func NewPinger(interval time.Duration, clientset *kubernetes.Clientset, dbEnabled bool, db util.Database, nodeIP string) (*Pinger, error) {
 	p := &Pinger{
 		Addr:      make(map[string]struct{}),
 		Latencies: make(map[string]time.Duration),

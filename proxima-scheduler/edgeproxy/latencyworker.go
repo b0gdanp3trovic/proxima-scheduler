@@ -25,6 +25,7 @@ func NewLatencyWorker(bufferSize int) *LatencyWorker {
 }
 
 func (lw *LatencyWorker) Start() {
+	log.Printf("Starting latency worker...")
 	go func() {
 		for data := range lw.latencyChan {
 			// TODO: save to db

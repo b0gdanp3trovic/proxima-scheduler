@@ -5,7 +5,6 @@ import (
 	"log"
 	"os"
 
-	"github.com/b0gdanp3trovic/proxima-scheduler/pinger"
 	"github.com/b0gdanp3trovic/proxima-scheduler/scheduler"
 	"github.com/b0gdanp3trovic/proxima-scheduler/util"
 	client "github.com/influxdata/influxdb1-client/v2"
@@ -31,7 +30,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	influxDb := pinger.NewInfluxDB(influxClient, cfg.DatabaseName)
+	influxDb := util.NewInfluxDB(influxClient, cfg.DatabaseName)
 
 	scheduler, err := scheduler.NewScheduler(cfg.SchedulerName, cfg.IncludedNamespaces, clientset, influxDb)
 
