@@ -24,6 +24,7 @@ func main() {
 
 	influxDb := util.NewInfluxDB(influxClient, cfg.RequestLatencyDatabaseName)
 
+	log.Printf("Host node IP: %s", cfg.NodeIP)
 	latencyWorker := edgeproxy.NewLatencyWorker(100, influxDb, cfg.NodeIP)
 	latencyWorker.Start()
 
