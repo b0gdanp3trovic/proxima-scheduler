@@ -3,6 +3,7 @@ package util
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"strconv"
 	"strings"
 	"time"
@@ -73,6 +74,8 @@ func (db *InfluxDB) SaveRequestLatency(podURL, nodeIP, edgeproxyNodeIP string, l
 		"pod":       podURL,
 		"edge_node": edgeproxyNodeIP,
 	}
+
+	log.Printf("Edge node proxy URL: %s", edgeproxyNodeIP)
 
 	fields := map[string]interface{}{
 		"latency_ms": latency.Seconds() * 1000,
