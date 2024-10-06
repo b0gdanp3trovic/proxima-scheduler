@@ -44,5 +44,9 @@ spec:
           value: "http://influxdb-service.influx.svc.cluster.local:8086"
         - name: REQUST_LATENCY_INFLUXDB_DB_NAME
           value: "request_latency_db"
+        - name: NODE_IP
+          valueFrom:
+            fieldRef:
+              fieldPath: status.hostIP
       serviceAccountName: edgeproxy-sa
       restartPolicy: Always
