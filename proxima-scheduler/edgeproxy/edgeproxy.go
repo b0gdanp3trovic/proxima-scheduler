@@ -10,6 +10,8 @@ import (
 	"net/http/httputil"
 	"strings"
 	"time"
+
+	"github.com/b0gdanp3trovic/proxima-scheduler/util"
 )
 
 type ConsulServiceInstance struct {
@@ -24,6 +26,7 @@ type EdgeProxy struct {
 	proxy         *httputil.ReverseProxy
 	consulAddress string
 	latencyChan   chan LatencyData
+	database      util.Database
 }
 
 func NewEdgeProxy(consulAddress string, worker *LatencyWorker) *EdgeProxy {
@@ -106,6 +109,7 @@ func preprocessRequest(consulAddress string, next http.Handler) http.Handler {
 			return
 		}
 
+		// Select best pod
 		pod := pods[0]
 		podUrl := fmt.Sprintf("%s:%d", pod.Service.Address, pod.Service.Port)
 		nodeIP, exists := pod.Service.Meta["node_ip"]
