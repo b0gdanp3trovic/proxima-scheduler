@@ -1,4 +1,4 @@
-package admissionwebhook
+package admissionhandler
 
 import (
 	"encoding/json"
@@ -14,17 +14,19 @@ import (
 )
 
 type AdmissionHandler struct {
-	scheme *runtime.Scheme
-	codecs serializer.CodecFactory
+	scheme    *runtime.Scheme
+	codecs    serializer.CodecFactory
+	consulURL string
 }
 
-func NewAdmissionHandler() *AdmissionHandler {
+func NewAdmissionHandler(consulURL string) *AdmissionHandler {
 	scheme := runtime.NewScheme()
 	corev1.AddToScheme(scheme)
 	codecs := serializer.NewCodecFactory(scheme)
 	return &AdmissionHandler{
-		scheme: scheme,
-		codecs: codecs,
+		scheme:    scheme,
+		codecs:    codecs,
+		consulURL: consulURL,
 	}
 }
 
@@ -57,7 +59,7 @@ func (h *AdmissionHandler) MutationHandler(w http.ResponseWriter, r *http.Reques
 	}
 
 	if value, ok := pod.Annotations["consul-register"]; ok && value == "true" {
-		addConsulRegisterInitContainer(&pod)
+		addConsulRegisterInitContainer(&pod, h.consulURL)
 
 		marshaledPod, err := json.Marshal(pod)
 		if err != nil {
@@ -83,7 +85,7 @@ func (h *AdmissionHandler) MutationHandler(w http.ResponseWriter, r *http.Reques
 
 }
 
-func addConsulRegisterInitContainer(pod *corev1.Pod) {
+func addConsulRegisterInitContainer(pod *corev1.Pod, consulURL string) {
 	initContainer := corev1.Container{
 		Name:  "consul-register",
 		Image: "curlimages/curl:7.77.0",
@@ -103,7 +105,7 @@ func addConsulRegisterInitContainer(pod *corev1.Pod) {
 					"http": "http://'$POD_IP':8080",
 					"interval": "10s"
 				}
-			}' http://consul-consul-server.consul:8500/v1/agent/service/register`,
+			}' ` + consulURL + `/v1/agent/service/register`,
 		},
 		Env: []corev1.EnvVar{
 			{
@@ -128,13 +130,13 @@ func addConsulRegisterInitContainer(pod *corev1.Pod) {
 	pod.Spec.InitContainers = append(pod.Spec.InitContainers, initContainer)
 }
 
-func main() {
-	admissionHandler := NewAdmissionHandler()
+func (h *AdmissionHandler) Start() {
+	go func() {
+		http.HandleFunc("/mutate", h.MutationHandler)
 
-	http.HandleFunc("/mutate", admissionHandler.MutationHandler)
-
-	fmt.Println("Starting webhook server on port 8080...")
-	if err := http.ListenAndServe(":8080", nil); err != nil {
-		fmt.Printf("Error starting server: %v\n", err)
-	}
+		fmt.Println("Starting webhook server on port 8080...")
+		if err := http.ListenAndServe(":8080", nil); err != nil {
+			fmt.Printf("Error starting server: %v\n", err)
+		}
+	}()
 }
