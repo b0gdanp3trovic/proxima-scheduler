@@ -1,0 +1,1 @@
+kubectl create secret tls admissionhandler-tls --cert=cert/cert.pem --key=cert/key.pem -n proxima-scheduler

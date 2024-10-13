@@ -1,0 +1,42 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: admissionhandler
+  namespace: proxima-scheduler
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: admissionhandler
+  template:
+    metadata:
+      labels:
+        app: admissionhandler
+    spec:
+      containers:
+      - name: edgeproxy
+        image: bogdanb0gdan/proxima-scheduler:latest
+        command: ["/edgeproxy"]
+        imagePullPolicy: Always
+        resources:
+          limits:
+            cpu: "500m"
+            memory: "256Mi"
+          requests:
+            cpu: "250m"
+            memory: "128Mi"
+        ports:
+        - containerPort: 8080
+        env:
+        - name: TLS_CERT_FILE
+          value: "/etc/webhook/certs/tls.crt"
+        - name: TLS_KEY_FILE
+          value: "/etc/webhook/certs/tls.key"
+        volumeMounts:
+        - name: admissionhandler-certs
+          mountPath: /etc/admissionhandler/certs
+          readOnly: true
+      volumes:
+      - name: admissionhandler-certs
+        secret:
+          secretName: admissionhandler-tls
