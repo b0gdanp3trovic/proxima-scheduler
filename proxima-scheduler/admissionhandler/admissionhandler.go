@@ -139,7 +139,7 @@ func (h *AdmissionHandler) Start() {
 		http.HandleFunc("/mutate", h.MutationHandler)
 
 		fmt.Println("Starting webhook server on port 8080 with TLS...")
-		err := http.ListenAndServeTLS(":8080", "/etc/webhook/certs/tls.crt", "/etc/webhook/certs/tls.key", nil)
+		err := http.ListenAndServeTLS(":8080", h.crtPath, h.keyPath, nil)
 
 		if err != nil {
 			fmt.Printf("Error starting TLS server: %v\n", err)
