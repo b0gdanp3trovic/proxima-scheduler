@@ -29,9 +29,9 @@ spec:
         - containerPort: 8080
         env:
         - name: ADMISSION_CRT_PATH
-          value: "/etc/webhook/certs/tls.crt"
+          value: "/etc/admissionhandler/tls.crt"
         - name: ADMISSION_KEY_PATH
-          value: "/etc/webhook/certs/tls.key"
+          value: "/etc/admissionhandler/tls.key"
         volumeMounts:
         - name: admissionhandler-certs
           mountPath: /etc/admissionhandler/certs
