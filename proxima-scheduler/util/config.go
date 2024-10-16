@@ -18,6 +18,8 @@ type Config struct {
 	SchedulerName              string
 	NodeIP                     string
 	ConsulURL                  string
+	AdmissionCrtPath           string
+	AdmissionKeyPath           string
 }
 
 func LoadConfig() *Config {
@@ -30,6 +32,8 @@ func LoadConfig() *Config {
 	schedulerName := getEnv("SCHEDULER_NAME", "proxima-scheduler")
 	nodeIP := getEnv("NODE_IP", "")
 	consulURL := getEnv("CONSUL_URL", "")
+	admissionCrtPath := getEnv("ADMISSION_CRT_PATH", "")
+	admissionKeyPath := getEnv("ADMISSION_KEY_PATH", "")
 
 	return &Config{
 		InfluxDBAddress:            influxDBAddress,
@@ -41,6 +45,8 @@ func LoadConfig() *Config {
 		SchedulerName:              schedulerName,
 		NodeIP:                     nodeIP,
 		ConsulURL:                  consulURL,
+		AdmissionCrtPath:           admissionCrtPath,
+		AdmissionKeyPath:           admissionKeyPath,
 	}
 }
 

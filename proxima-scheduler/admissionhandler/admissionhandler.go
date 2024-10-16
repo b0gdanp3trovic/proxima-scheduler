@@ -17,9 +17,11 @@ type AdmissionHandler struct {
 	scheme    *runtime.Scheme
 	codecs    serializer.CodecFactory
 	consulURL string
+	crtPath   string
+	keyPath   string
 }
 
-func NewAdmissionHandler(consulURL string) *AdmissionHandler {
+func NewAdmissionHandler(consulURL string, crtPath string, keyPath string) *AdmissionHandler {
 	scheme := runtime.NewScheme()
 	corev1.AddToScheme(scheme)
 	codecs := serializer.NewCodecFactory(scheme)
@@ -27,6 +29,8 @@ func NewAdmissionHandler(consulURL string) *AdmissionHandler {
 		scheme:    scheme,
 		codecs:    codecs,
 		consulURL: consulURL,
+		crtPath:   crtPath,
+		keyPath:   keyPath,
 	}
 }
 
@@ -134,9 +138,11 @@ func (h *AdmissionHandler) Start() {
 	go func() {
 		http.HandleFunc("/mutate", h.MutationHandler)
 
-		fmt.Println("Starting webhook server on port 8080...")
-		if err := http.ListenAndServe(":8080", nil); err != nil {
-			fmt.Printf("Error starting server: %v\n", err)
+		fmt.Println("Starting webhook server on port 8080 with TLS...")
+		err := http.ListenAndServeTLS(":8080", "/etc/webhook/certs/tls.crt", "/etc/webhook/certs/tls.key", nil)
+
+		if err != nil {
+			fmt.Printf("Error starting TLS server: %v\n", err)
 		}
 	}()
 }
