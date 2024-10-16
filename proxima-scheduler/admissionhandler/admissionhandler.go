@@ -90,6 +90,7 @@ func (h *AdmissionHandler) MutationHandler(w http.ResponseWriter, r *http.Reques
 }
 
 func addConsulRegisterInitContainer(pod *corev1.Pod, consulURL string) {
+	fmt.Printf("Received new admission request for pod %s (UID: %s)\n", pod.Name, pod.UID)
 	initContainer := corev1.Container{
 		Name:  "consul-register",
 		Image: "curlimages/curl:7.77.0",

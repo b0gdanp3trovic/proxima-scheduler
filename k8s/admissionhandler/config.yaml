@@ -3,7 +3,7 @@ kind: MutatingWebhookConfiguration
 metadata:
   name: admissionhandler-config
 webhooks:
-  - name: admissionhandler-service.default.svc
+  - name: admissionhandler-service.proxima-scheduler.svc
     clientConfig:
       service:
         name: admissionhandler-service
@@ -18,3 +18,9 @@ webhooks:
     admissionReviewVersions: ["v1"]
     sideEffects: None
     timeoutSeconds: 5
+    namespaceSelector:
+      matchExpressions:
+      - key: "kubernetes.io/metadata.name"
+        operator: "NotIn"
+        values:
+        - "proxima-scheduler"

@@ -16,7 +16,7 @@ spec:
       containers:
       - name: edgeproxy
         image: bogdanb0gdan/proxima-scheduler:latest
-        command: ["/edgeproxy"]
+        command: ["/admissionhandler"]
         imagePullPolicy: Always
         resources:
           limits:
@@ -29,9 +29,9 @@ spec:
         - containerPort: 8080
         env:
         - name: ADMISSION_CRT_PATH
-          value: "/etc/admissionhandler/tls.crt"
+          value: "/etc/admissionhandler/certs/tls.crt"
         - name: ADMISSION_KEY_PATH
-          value: "/etc/admissionhandler/tls.key"
+          value: "/etc/admissionhandler/certs/tls.key"
         volumeMounts:
         - name: admissionhandler-certs
           mountPath: /etc/admissionhandler/certs
