@@ -1,3 +1,6 @@
 .env
 *.exe
 *.pem
+*.csr
+*.crt
+*.key

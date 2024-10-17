@@ -18,33 +18,4 @@ spec:
         image: bogdanb0gdan/test-flask-service:latest
         ports:
         - containerPort: 8080
-      initContainers:
-      - name: consul-register
-        image: curlimages/curl:7.77.0
-        command:
-          - "sh"
-          - "-c"
-          - |
-            curl --request PUT --data '{
-              "ID": "test-flask-service-'$POD_IP'",
-              "Name": "test-flask-service",
-              "Address": "'$POD_IP'",
-              "Meta": {
-                "node_ip": "'$NODE_IP'",
-                "pod_ip": "'$POD_IP'"
-              },
-              "Port": 8080,
-              "Check": {
-                "http": "http://'$POD_IP':8080",
-                "interval": "10s"
-              }
-            }' http://consul-consul-server.consul:8500/v1/agent/service/register
-        env:
-        - name: POD_IP
-          valueFrom:
-            fieldRef:
-              fieldPath: status.podIP
-        - name: NODE_IP
-          valueFrom:
-            fieldRef:
-              fieldPath: status.hostIP
+
