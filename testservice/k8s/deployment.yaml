@@ -12,6 +12,8 @@ spec:
     metadata:
       labels:
         app: test-flask-service
+      annotations:
+        consul-register: "true"
     spec:
       containers:
       - name: test-flask-service-container

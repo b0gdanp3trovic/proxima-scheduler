@@ -36,6 +36,7 @@ func NewAdmissionHandler(consulURL string, crtPath string, keyPath string) *Admi
 
 func (h *AdmissionHandler) MutationHandler(w http.ResponseWriter, r *http.Request) {
 	var admissionReviewReq admissionv1.AdmissionReview
+	var admissionReviewResp admissionv1.AdmissionReview
 
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
@@ -49,48 +50,36 @@ func (h *AdmissionHandler) MutationHandler(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	raw := admissionReviewReq.Request.Object.Raw
 	pod := corev1.Pod{}
-	if err := json.Unmarshal(raw, &pod); err != nil {
+	if err := json.Unmarshal(admissionReviewReq.Request.Object.Raw, &pod); err != nil {
 		http.Error(w, fmt.Sprintf("could not unmarshal pod: %v", err), http.StatusBadRequest)
 		return
 	}
 
-	admissionReviewResp := admissionv1.AdmissionReview{
-		Response: &admissionv1.AdmissionResponse{
-			UID: admissionReviewReq.Request.UID,
-		},
-	}
+	fmt.Printf("Received new admission request for pod %s (UID: %s)\n", pod.Name, string(admissionReviewReq.Request.UID))
 
 	if value, ok := pod.Annotations["consul-register"]; ok && value == "true" {
+		fmt.Printf("Adding consul-register init container to pod %s\n", pod.Name)
 		addConsulRegisterInitContainer(&pod, h.consulURL)
-
-		marshaledPod, err := json.Marshal(pod)
-		if err != nil {
-			http.Error(w, fmt.Sprintf("could not marshal pod: %v", err), http.StatusInternalServerError)
-			return
-		}
-
-		admissionReviewResp.Response.Allowed = true
-		admissionReviewResp.Response.Patch = marshaledPod
-		pt := admissionv1.PatchTypeJSONPatch
-		admissionReviewResp.Response.PatchType = &pt
-	} else {
-		admissionReviewResp.Response.Allowed = true
 	}
 
+	admissionReviewResp.Response = &admissionv1.AdmissionResponse{
+		UID:     admissionReviewReq.Request.UID,
+		Allowed: true,
+	}
+
+	// Marshal and send back the response
 	respBytes, err := json.Marshal(admissionReviewResp)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("could not marshal response: %v", err), http.StatusInternalServerError)
 		return
 	}
 
+	w.Header().Set("Content-Type", "application/json")
 	w.Write(respBytes)
-
 }
 
 func addConsulRegisterInitContainer(pod *corev1.Pod, consulURL string) {
-	fmt.Printf("Received new admission request for pod %s (UID: %s)\n", pod.Name, pod.UID)
 	initContainer := corev1.Container{
 		Name:  "consul-register",
 		Image: "curlimages/curl:7.77.0",
