@@ -56,8 +56,6 @@ func (h *AdmissionHandler) MutationHandler(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	fmt.Printf("Received new admission request for pod %s (UID: %s)\n", pod.Name, string(admissionReviewReq.Request.UID))
-
 	if value, ok := pod.Annotations["consul-register"]; ok && value == "true" {
 		fmt.Printf("Adding consul-register init container to pod %s\n", pod.Name)
 		addConsulRegisterInitContainer(&pod, h.consulURL)
@@ -67,6 +65,9 @@ func (h *AdmissionHandler) MutationHandler(w http.ResponseWriter, r *http.Reques
 		UID:     admissionReviewReq.Request.UID,
 		Allowed: true,
 	}
+
+	admissionReviewResp.APIVersion = "admission.k8s.io/v1"
+	admissionReviewResp.Kind = "AdmissionReview"
 
 	// Marshal and send back the response
 	respBytes, err := json.Marshal(admissionReviewResp)
