@@ -80,7 +80,7 @@ func (h *AdmissionHandler) MutationHandler(w http.ResponseWriter, r *http.Reques
 		http.Error(w, fmt.Sprintf("could not marshal response: %v", err), http.StatusInternalServerError)
 		return
 	}
-
+	fmt.Printf("Finished mutating a pod.")
 	w.Header().Set("Content-Type", "application/json")
 	w.Write(respBytes)
 }
