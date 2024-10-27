@@ -56,27 +56,20 @@ func (h *AdmissionHandler) MutationHandler(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	// If the pod has the consul-register annotation, mutate the pod
 	if value, ok := pod.Annotations["consul-register"]; ok && value == "true" {
 		fmt.Printf("Adding consul-register init container to pod %s\n", pod.Name)
 		addConsulRegisterInitContainer(&pod, h.consulURL)
 	}
 
-	// Marshal the entire mutated pod
-	mutatedPod, err := json.Marshal(pod)
-	if err != nil {
-		http.Error(w, fmt.Sprintf("could not marshal mutated pod: %v", err), http.StatusInternalServerError)
-		return
-	}
+	//mutatedPod, err := json.Marshal(pod)
+	//if err != nil {
+	//	http.Error(w, fmt.Sprintf("could not marshal mutated pod: %v", err), http.StatusInternalServerError)
+	//	return
+	//}
 
 	admissionReviewResp.Response = &admissionv1.AdmissionResponse{
 		UID:     admissionReviewReq.Request.UID,
 		Allowed: true,
-		Patch:   mutatedPod,
-		PatchType: func() *admissionv1.PatchType {
-			pt := admissionv1.PatchTypeJSONPatch
-			return &pt
-		}(),
 	}
 
 	admissionReviewResp.APIVersion = "admission.k8s.io/v1"
@@ -90,7 +83,6 @@ func (h *AdmissionHandler) MutationHandler(w http.ResponseWriter, r *http.Reques
 
 	w.Header().Set("Content-Type", "application/json")
 	w.Write(respBytes)
-
 }
 
 func addConsulRegisterInitContainer(pod *corev1.Pod, consulURL string) {
