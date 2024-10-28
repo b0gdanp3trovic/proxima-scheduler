@@ -32,6 +32,8 @@ spec:
           value: "/etc/admissionhandler/certs/tls.crt"
         - name: ADMISSION_KEY_PATH
           value: "/etc/admissionhandler/certs/tls.key"
+        - name: CONSUL_URL
+          value: "http://consul-consul-server.consul:8500"
         volumeMounts:
         - name: admissionhandler-certs
           mountPath: /etc/admissionhandler/certs

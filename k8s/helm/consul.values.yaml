@@ -1,5 +1,5 @@
 connectInject:
-  enabled: true
+  enabled: false
 
 controller:
   enabled: true
