@@ -58,18 +58,28 @@ func (h *AdmissionHandler) MutationHandler(w http.ResponseWriter, r *http.Reques
 
 	if value, ok := pod.Annotations["consul-register"]; ok && value == "true" {
 		fmt.Printf("Adding consul-register init container to pod %s\n", pod.Name)
-		addConsulRegisterInitContainer(&pod, h.consulURL)
-	}
 
-	//mutatedPod, err := json.Marshal(pod)
-	//if err != nil {
-	//	http.Error(w, fmt.Sprintf("could not marshal mutated pod: %v", err), http.StatusInternalServerError)
-	//	return
-	//}
+		patchBytes, err := createInitContainerPatch(h.consulURL)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("could not create JSON patch: %v", err), http.StatusInternalServerError)
+			return
+		}
 
-	admissionReviewResp.Response = &admissionv1.AdmissionResponse{
-		UID:     admissionReviewReq.Request.UID,
-		Allowed: true,
+		admissionReviewResp.Response = &admissionv1.AdmissionResponse{
+			UID:     admissionReviewReq.Request.UID,
+			Allowed: true,
+			Patch:   patchBytes,
+			PatchType: func() *admissionv1.PatchType {
+				pt := admissionv1.PatchTypeJSONPatch
+				return &pt
+			}(),
+		}
+	} else {
+		fmt.Printf("Allowing pod %s without modification", pod.Name)
+		admissionReviewResp.Response = &admissionv1.AdmissionResponse{
+			UID:     admissionReviewReq.Request.UID,
+			Allowed: true,
+		}
 	}
 
 	admissionReviewResp.APIVersion = "admission.k8s.io/v1"
@@ -80,12 +90,12 @@ func (h *AdmissionHandler) MutationHandler(w http.ResponseWriter, r *http.Reques
 		http.Error(w, fmt.Sprintf("could not marshal response: %v", err), http.StatusInternalServerError)
 		return
 	}
-	fmt.Printf("Finished mutating a pod.")
+	fmt.Println("Finished processing admission request.")
 	w.Header().Set("Content-Type", "application/json")
 	w.Write(respBytes)
 }
 
-func addConsulRegisterInitContainer(pod *corev1.Pod, consulURL string) {
+func createInitContainerPatch(consulURL string) ([]byte, error) {
 	initContainer := corev1.Container{
 		Name:  "consul-register",
 		Image: "curlimages/curl:7.77.0",
@@ -127,7 +137,15 @@ func addConsulRegisterInitContainer(pod *corev1.Pod, consulURL string) {
 		},
 	}
 
-	pod.Spec.InitContainers = append(pod.Spec.InitContainers, initContainer)
+	patch := []map[string]interface{}{
+		{
+			"op":    "add",
+			"path":  "/spec/initContainers",
+			"value": []corev1.Container{initContainer},
+		},
+	}
+
+	return json.Marshal(patch)
 }
 
 func (h *AdmissionHandler) Start() {
