@@ -164,6 +164,7 @@ func (ep *EdgeProxy) getBestPod(serviceName string) (ConsulServiceInstance, erro
 }
 
 func getLatencyForNode(nodeIP string, averageLatencies map[string]float64) (float64, error) {
+	log.Printf("Avg latencies: %v", averageLatencies)
 	latency, exists := averageLatencies[nodeIP]
 	if !exists {
 		return 0, fmt.Errorf("latency data not found for node %s", nodeIP)
