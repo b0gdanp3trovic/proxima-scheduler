@@ -91,7 +91,7 @@ func (db *InfluxDB) SaveRequestLatency(podURL, nodeIP, edgeproxyNodeIP string, l
 func (db *InfluxDB) GetAveragePingTime() (map[string]float64, error) {
 	query := fmt.Sprintf(`
 		SELECT MEAN("latency_ms")
-		FROM "%s"
+		FROM %s.autogen.ping_times
 		WHERE time > now() - 30s
 		GROUP BY "node"
 	`, db.DatabaseName)
