@@ -185,6 +185,7 @@ func preprocessRequest(ep *EdgeProxy) http.Handler {
 		pod, err := ep.getBestPod(serviceName)
 		if err != nil {
 			http.Error(w, "Failed obtaining the best pod.", http.StatusInternalServerError)
+			return
 		}
 
 		podUrl := fmt.Sprintf("%s:%d", pod.Service.Address, pod.Service.Port)
