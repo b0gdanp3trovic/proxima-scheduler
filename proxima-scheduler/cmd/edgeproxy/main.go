@@ -3,6 +3,7 @@ package main
 import (
 	"log"
 	"os"
+	"time"
 
 	"github.com/b0gdanp3trovic/proxima-scheduler/edgeproxy"
 	"github.com/b0gdanp3trovic/proxima-scheduler/util"
@@ -27,7 +28,10 @@ func main() {
 	latencyWorker := edgeproxy.NewLatencyWorker(100, influxDb, cfg.NodeIP)
 	latencyWorker.Start()
 
-	edgeProxy := edgeproxy.NewEdgeProxy(cfg.ConsulURL, latencyWorker)
+	// TODO - change
+	cacheDuration := 10 * time.Second
+
+	edgeProxy := edgeproxy.NewEdgeProxy(cfg.ConsulURL, latencyWorker, influxDb, cacheDuration)
 	edgeProxy.Run()
 
 	// Block the function from exiting
