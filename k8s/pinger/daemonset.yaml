@@ -46,7 +46,7 @@ spec:
           value: "default"
         - name: INFLUXDB_ADDRESS
           value: "http://influxdb-service.influx.svc.cluster.local:8086"
-        - name: INFLUXDB_DB_NAME
+        - name: INFLUXDB_DB_PING
           value: "ping_db"
       serviceAccountName: pinger-sa
       restartPolicy: Always

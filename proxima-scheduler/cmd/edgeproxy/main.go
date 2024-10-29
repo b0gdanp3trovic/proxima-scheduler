@@ -23,7 +23,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	influxDb := util.NewInfluxDB(influxClient, cfg.RequestLatencyDatabaseName)
+	influxDb := util.NewInfluxDB(influxClient, cfg.LatencyDbName)
 
 	latencyWorker := edgeproxy.NewLatencyWorker(100, influxDb, cfg.NodeIP)
 	latencyWorker.Start()

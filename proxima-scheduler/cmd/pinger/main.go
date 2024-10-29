@@ -29,7 +29,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	influxDb := util.NewInfluxDB(influxClient, cfg.DatabaseName)
+	influxDb := util.NewInfluxDB(influxClient, cfg.PingDbName)
 
 	pinger, err := pinger.NewPinger(cfg.PingInterval, clientset, cfg.DatabaseEnabled, influxDb, cfg.NodeIP)
 

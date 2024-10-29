@@ -9,23 +9,23 @@ import (
 )
 
 type Config struct {
-	InfluxDBAddress            string
-	DatabaseName               string
-	RequestLatencyDatabaseName string
-	DatabaseEnabled            bool
-	PingInterval               time.Duration
-	IncludedNamespaces         []string
-	SchedulerName              string
-	NodeIP                     string
-	ConsulURL                  string
-	AdmissionCrtPath           string
-	AdmissionKeyPath           string
+	InfluxDBAddress    string
+	PingDbName         string
+	LatencyDbName      string
+	DatabaseEnabled    bool
+	PingInterval       time.Duration
+	IncludedNamespaces []string
+	SchedulerName      string
+	NodeIP             string
+	ConsulURL          string
+	AdmissionCrtPath   string
+	AdmissionKeyPath   string
 }
 
 func LoadConfig() *Config {
 	influxDBAddress := getEnv("INFLUXDB_ADDRESS", "http://localhost:8086")
-	databaseName := getEnv("INFLUXDB_DB_NAME", "ping_db")
-	requestLatencyDatabaseName := getEnv("REQUEST_LATENCY_INFLUX_DB_NAME", "request_latency_db")
+	pingDbName := getEnv("INFLUXDB_DB_PING", "ping_db")
+	latencyDbName := getEnv("INFLUXDB_DB_LATENCY", "request_latency_db")
 	databaseEnabled := getEnvAsBool("DATABASE_ENABLED", true)
 	pingInterval := getEnvAsDuration("PING_INTERVAL", 10*time.Second)
 	includedNamespaces := parseIncludedNamespaces("INCLUDED_NAMESPACES", []string{"default"})
@@ -36,17 +36,17 @@ func LoadConfig() *Config {
 	admissionKeyPath := getEnv("ADMISSION_KEY_PATH", "")
 
 	return &Config{
-		InfluxDBAddress:            influxDBAddress,
-		DatabaseName:               databaseName,
-		RequestLatencyDatabaseName: requestLatencyDatabaseName,
-		DatabaseEnabled:            databaseEnabled,
-		PingInterval:               pingInterval,
-		IncludedNamespaces:         includedNamespaces,
-		SchedulerName:              schedulerName,
-		NodeIP:                     nodeIP,
-		ConsulURL:                  consulURL,
-		AdmissionCrtPath:           admissionCrtPath,
-		AdmissionKeyPath:           admissionKeyPath,
+		InfluxDBAddress:    influxDBAddress,
+		PingDbName:         pingDbName,
+		LatencyDbName:      latencyDbName,
+		DatabaseEnabled:    databaseEnabled,
+		PingInterval:       pingInterval,
+		IncludedNamespaces: includedNamespaces,
+		SchedulerName:      schedulerName,
+		NodeIP:             nodeIP,
+		ConsulURL:          consulURL,
+		AdmissionCrtPath:   admissionCrtPath,
+		AdmissionKeyPath:   admissionKeyPath,
 	}
 }
 
