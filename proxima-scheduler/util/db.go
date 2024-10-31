@@ -11,8 +11,9 @@ import (
 )
 
 type Database interface {
-	SavePingTime(latencies map[string]time.Duration) error
-	GetAveragePingTime() (map[string]float64, error)
+	SavePingTime(latencies map[string]time.Duration, edgeProxyAddress string) error
+	GetAveragePingTime() (NodeLatencies, error)
+	GetAveragePingTimeByEdges() (EdgeProxyToNodeLatencies, error)
 	SaveRequestLatency(podURL, nodeIP, edgeproxyNodeIP string, latency time.Duration) error
 }
 
@@ -21,6 +22,10 @@ type InfluxDB struct {
 	Client       client.Client
 }
 
+type NodeLatencies map[string]float64
+
+type EdgeProxyToNodeLatencies map[string]map[string]float64
+
 func NewInfluxDB(client client.Client, databaseName string) *InfluxDB {
 	return &InfluxDB{
 		DatabaseName: databaseName,
@@ -28,7 +33,7 @@ func NewInfluxDB(client client.Client, databaseName string) *InfluxDB {
 	}
 }
 
-func (db *InfluxDB) SavePingTime(latencies map[string]time.Duration) error {
+func (db *InfluxDB) SavePingTime(latencies map[string]time.Duration, edgeProxyAddress string) error {
 	bp, err := client.NewBatchPoints(client.BatchPointsConfig{
 		Database:  db.DatabaseName,
 		Precision: "s",
@@ -40,7 +45,8 @@ func (db *InfluxDB) SavePingTime(latencies map[string]time.Duration) error {
 
 	for address, latency := range latencies {
 		tags := map[string]string{
-			"node": address,
+			"node":       address,
+			"edge_proxy": edgeProxyAddress,
 		}
 
 		fields := map[string]interface{}{
@@ -88,7 +94,7 @@ func (db *InfluxDB) SaveRequestLatency(podURL, nodeIP, edgeproxyNodeIP string, l
 	return db.Client.Write(bp)
 }
 
-func (db *InfluxDB) GetAveragePingTime() (map[string]float64, error) {
+func (db *InfluxDB) GetAveragePingTime() (NodeLatencies, error) {
 	query := fmt.Sprintf(`
 		SELECT MEAN("latency_ms")
 		FROM %s.autogen.ping_times
@@ -111,33 +117,70 @@ func (db *InfluxDB) GetAveragePingTime() (map[string]float64, error) {
 		node := strings.TrimSpace(strings.ToLower(row.Tags["node"]))
 
 		if len(row.Values) > 0 {
-			latencyInterface := row.Values[0][1]
-
-			// Safely convert latency to float64
-			switch latencyInterface.(type) {
-			case float64:
-				result[node] = latencyInterface.(float64)
-			case string:
-				latencyStr := latencyInterface.(string)
-				latency, err := strconv.ParseFloat(latencyStr, 64)
-				if err != nil {
-					fmt.Printf("Error parsing latency for node %s: %v\n", node, err)
-					continue
-				}
-				result[node] = latency
-			case json.Number:
-				latency, err := latencyInterface.(json.Number).Float64()
-				if err != nil {
-					fmt.Printf("Error converting latency for node %s: %v\n", node, err)
-					continue
-				}
-				result[node] = latency
-			default:
-				fmt.Printf("Unexpected type for latency value on node %s: %T\n", node, latencyInterface)
+			latency, err := parseLatency(row.Values[0][1], node)
+			if err != nil {
+				fmt.Printf("Error parsing latency for node %s: %v\n", node, err)
 				continue
 			}
+			result[node] = latency
 		}
 	}
 
 	return result, nil
+}
+
+func (db *InfluxDB) GetAveragePingTimeByEdges() (EdgeProxyToNodeLatencies, error) {
+	query := fmt.Sprintf(`
+		SELECT MEAN("latency_ms")
+		FROM %s.autogen.ping_times
+		WHERE time > now() - 30s
+		GROUP BY "node", "edge_proxy"
+	`, db.DatabaseName)
+
+	q := client.NewQuery(query, db.DatabaseName, "s")
+	response, err := db.Client.Query(q)
+	if err != nil {
+		return nil, err
+	}
+
+	if response.Error() != nil {
+		return nil, response.Error()
+	}
+
+	result := make(EdgeProxyToNodeLatencies)
+
+	for _, row := range response.Results[0].Series {
+		node := strings.TrimSpace(strings.ToLower(row.Tags["node"]))
+		edgeProxy := strings.TrimSpace(strings.ToLower(row.Tags["edge_proxy"]))
+
+		if result[edgeProxy] == nil {
+			result[edgeProxy] = make(map[string]float64)
+		}
+
+		if len(row.Values) > 0 {
+			latency, err := parseLatency(row.Values[0][1], node)
+			if err != nil {
+				fmt.Printf("Error parsing latency for node %s and edge proxy %s: %v\n", node, edgeProxy, err)
+				continue
+			}
+
+			result[edgeProxy][node] = latency
+		}
+	}
+
+	return result, nil
+}
+
+func parseLatency(latencyInterface interface{}, node string) (float64, error) {
+	switch latencyInterface.(type) {
+	case float64:
+		return latencyInterface.(float64), nil
+	case string:
+		latencyStr := latencyInterface.(string)
+		return strconv.ParseFloat(latencyStr, 64)
+	case json.Number:
+		return latencyInterface.(json.Number).Float64()
+	default:
+		return 0, fmt.Errorf("unexpected type for latency value on node %s: %T", node, latencyInterface)
+	}
 }

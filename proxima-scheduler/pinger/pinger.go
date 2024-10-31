@@ -156,7 +156,7 @@ func (p *Pinger) SaveLatenciesToDB() {
 		return
 	}
 
-	if err := p.DB.SavePingTime(p.Latencies); err != nil {
+	if err := p.DB.SavePingTime(p.Latencies, p.NodeIP); err != nil {
 		log.Printf("Failed to save latencies to the database: %v", err)
 	} else {
 		fmt.Println("Successfully saved latencies to the database.")

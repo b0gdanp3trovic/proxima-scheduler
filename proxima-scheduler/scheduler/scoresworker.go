@@ -1,8 +1,6 @@
 package scheduler
 
 import (
-	"fmt"
-
 	"github.com/b0gdanp3trovic/proxima-scheduler/util"
 	"k8s.io/client-go/kubernetes"
 )
@@ -23,12 +21,16 @@ func NewScoresWorker(clientset *kubernetes.Clientset, dbScores util.Database, db
 	}
 }
 
-func (sw *ScoresWorker) processNodes() {
-	_, err := util.DiscoverNodes(sw.Clientset)
-	if err != nil {
-		fmt.Printf("Error processing nodes: %v\n", err)
-		return
-	}
-
-	// TODO: implement scoring system
-}
+//func (sw *ScoresWorker) scoreNodes() {
+//	nodes, err := util.DiscoverNodes(sw.Clientset)
+//	if err != nil {
+//		fmt.Printf("Error processing nodes: %v\n", err)
+//		return
+//	}
+//
+//	for _, node := range nodes.Items {
+//		address := node.Status.Addresses[0].Address
+//	}
+//
+//	// TODO: implement scoring system
+//}
