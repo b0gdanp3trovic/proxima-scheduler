@@ -23,7 +23,10 @@ func main() {
 		os.Exit(1)
 	}
 
-	influxDb := util.NewInfluxDB(influxClient, cfg.DbName)
+	influxDb, err := util.NewInfluxDB(influxClient, cfg.DbName)
+	if err != nil {
+		log.Fatalf("Failed to initialize influx db: %v", err)
+	}
 
 	latencyWorker := edgeproxy.NewLatencyWorker(100, influxDb, cfg.NodeIP)
 	latencyWorker.Start()

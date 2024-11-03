@@ -29,7 +29,10 @@ func main() {
 		os.Exit(1)
 	}
 
-	influxDb := util.NewInfluxDB(influxClient, cfg.DbName)
+	influxDb, err := util.NewInfluxDB(influxClient, cfg.DbName)
+	if err != nil {
+		log.Fatalf("Failed to initialize influx db: %v", err)
+	}
 
 	pinger, err := pinger.NewPinger(cfg.PingInterval, clientset, cfg.DatabaseEnabled, influxDb, cfg.NodeIP)
 

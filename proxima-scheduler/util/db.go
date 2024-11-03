@@ -16,6 +16,7 @@ type Database interface {
 	GetAveragePingTimeByEdges() (EdgeProxyToNodeLatencies, error)
 	SaveRequestLatency(podURL string, nodeIP string, edgeproxyNodeIP string, latency time.Duration) error
 	SaveNodeScores(scores map[string]float64) error
+	createDbIfNotExists() error
 }
 
 type InfluxDB struct {
@@ -27,11 +28,29 @@ type NodeLatencies map[string]float64
 
 type EdgeProxyToNodeLatencies map[string]map[string]float64
 
-func NewInfluxDB(client client.Client, databaseName string) *InfluxDB {
-	return &InfluxDB{
+func NewInfluxDB(client client.Client, databaseName string) (*InfluxDB, error) {
+	db := &InfluxDB{
 		DatabaseName: databaseName,
 		Client:       client,
 	}
+
+	if err := db.createDbIfNotExists(); err != nil {
+		return nil, err
+	}
+
+	return db, nil
+}
+
+func (db *InfluxDB) createDbIfNotExists() error {
+	q := client.NewQuery(fmt.Sprintf("CREATE DATABASE %s", db.DatabaseName), "", "")
+	response, err := db.Client.Query(q)
+	if err != nil {
+		return fmt.Errorf("failed to execute database creation query: %w", err)
+	}
+	if response.Error() != nil {
+		return fmt.Errorf("failed to create database %s: %w", db.DatabaseName, response.Error())
+	}
+	return nil
 }
 
 func (db *InfluxDB) SavePingTime(latencies map[string]time.Duration, edgeProxyAddress string) error {
