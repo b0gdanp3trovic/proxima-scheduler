@@ -55,6 +55,41 @@ func DiscoverNodes(clientset *kubernetes.Clientset) (*v1.NodeList, error) {
 	return nodes, nil
 }
 
+func DiscoverEdgeNodesByDaemonset(clientset *kubernetes.Clientset, namespace string, daemonsetName string) (map[string]string, error) {
+	edges := make(map[string]string)
+
+	pods, err := clientset.CoreV1().Pods(namespace).List(context.TODO(), metav1.ListOptions{
+		LabelSelector: fmt.Sprintf("app=%s", daemonsetName),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to list pods for DaemonSet %s in namespace %s: %v", daemonsetName, namespace, err)
+	}
+
+	for _, pod := range pods.Items {
+		nodeName := pod.Spec.NodeName
+		if _, exists := edges[nodeName]; exists {
+			continue
+		}
+
+		node, err := clientset.CoreV1().Nodes().Get(context.TODO(), nodeName, metav1.GetOptions{})
+		if err != nil {
+			log.Printf("Failed to get node %s: %v", nodeName, err)
+			continue
+		}
+
+		for _, addr := range node.Status.Addresses {
+			if addr.Type == v1.NodeInternalIP {
+				edges[nodeName] = addr.Address
+				log.Printf("Discovered edge node %s with internal IP %s", nodeName, addr.Address)
+				break
+			}
+		}
+	}
+
+	fmt.Printf("Discovered %d edge nodes based on DaemonSet %s\n", len(edges), daemonsetName)
+	return edges, nil
+}
+
 // Primarily used to provide formatted data to a Pinger instance
 func ExtractNodeAddresses(nodes []v1.Node) []string {
 	var addresses []string

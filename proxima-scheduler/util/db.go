@@ -14,7 +14,8 @@ type Database interface {
 	SavePingTime(latencies map[string]time.Duration, edgeProxyAddress string) error
 	GetAveragePingTime() (NodeLatencies, error)
 	GetAveragePingTimeByEdges() (EdgeProxyToNodeLatencies, error)
-	SaveRequestLatency(podURL, nodeIP, edgeproxyNodeIP string, latency time.Duration) error
+	SaveRequestLatency(podURL string, nodeIP string, edgeproxyNodeIP string, latency time.Duration) error
+	SaveNodeScores(scores map[string]float64) error
 }
 
 type InfluxDB struct {
@@ -64,7 +65,7 @@ func (db *InfluxDB) SavePingTime(latencies map[string]time.Duration, edgeProxyAd
 	return db.Client.Write(bp)
 }
 
-func (db *InfluxDB) SaveRequestLatency(podURL, nodeIP, edgeproxyNodeIP string, latency time.Duration) error {
+func (db *InfluxDB) SaveRequestLatency(podURL string, nodeIP string, edgeproxyNodeIP string, latency time.Duration) error {
 	bp, err := client.NewBatchPoints(client.BatchPointsConfig{
 		Database:  db.DatabaseName,
 		Precision: "s",
@@ -169,6 +170,37 @@ func (db *InfluxDB) GetAveragePingTimeByEdges() (EdgeProxyToNodeLatencies, error
 	}
 
 	return result, nil
+}
+
+func (db *InfluxDB) SaveNodeScores(scores map[string]float64) error {
+	bp, err := client.NewBatchPoints(client.BatchPointsConfig{
+		Database:  db.DatabaseName,
+		Precision: "s",
+	})
+	if err != nil {
+		return fmt.Errorf("failed to create batch points: %w", err)
+	}
+
+	for nodeIP, score := range scores {
+		tags := map[string]string{
+			"node": nodeIP,
+		}
+		fields := map[string]interface{}{
+			"score": score,
+		}
+
+		pt, err := client.NewPoint("node_scores", tags, fields, time.Now())
+		if err != nil {
+			return fmt.Errorf("failed to create point for node %s: %w", nodeIP, err)
+		}
+		bp.AddPoint(pt)
+	}
+
+	if err := db.Client.Write(bp); err != nil {
+		return fmt.Errorf("failed to write batch points to InfluxDB: %w", err)
+	}
+
+	return nil
 }
 
 func parseLatency(latencyInterface interface{}, node string) (float64, error) {
