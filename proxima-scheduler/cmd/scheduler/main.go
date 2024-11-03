@@ -30,7 +30,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	influxDb := util.NewInfluxDB(influxClient, cfg.PingDbName)
+	influxDb := util.NewInfluxDB(influxClient, cfg.DbName)
 
 	scheduler, err := scheduler.NewScheduler(cfg.SchedulerName, cfg.IncludedNamespaces, clientset, influxDb)
 

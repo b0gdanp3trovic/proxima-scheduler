@@ -42,10 +42,8 @@ spec:
           value: "true"
         - name: INFLUXDB_ADDRESS
           value: "http://influxdb-service.influx.svc.cluster.local:8086"
-        - name: INFLUXDB_DB_PING
-          value: "ping_db"
-        - name: INFLUXDB_DB_LATENCY
-          value: "request_latency_db"
+        - name: INFLUXDB_DB_NAME
+          value: "proxima_scheduler"
         - name: NODE_IP
           valueFrom:
             fieldRef:

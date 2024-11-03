@@ -10,8 +10,7 @@ import (
 
 type Config struct {
 	InfluxDBAddress    string
-	PingDbName         string
-	LatencyDbName      string
+	DbName             string
 	DatabaseEnabled    bool
 	PingInterval       time.Duration
 	IncludedNamespaces []string
@@ -24,8 +23,7 @@ type Config struct {
 
 func LoadConfig() *Config {
 	influxDBAddress := getEnv("INFLUXDB_ADDRESS", "http://localhost:8086")
-	pingDbName := getEnv("INFLUXDB_DB_PING", "ping_db")
-	latencyDbName := getEnv("INFLUXDB_DB_LATENCY", "request_latency_db")
+	dbName := getEnv("INFLUXDB_DB_NAME", "proxima_scheduler")
 	databaseEnabled := getEnvAsBool("DATABASE_ENABLED", true)
 	pingInterval := getEnvAsDuration("PING_INTERVAL", 10*time.Second)
 	includedNamespaces := parseIncludedNamespaces("INCLUDED_NAMESPACES", []string{"default"})
@@ -37,8 +35,7 @@ func LoadConfig() *Config {
 
 	return &Config{
 		InfluxDBAddress:    influxDBAddress,
-		PingDbName:         pingDbName,
-		LatencyDbName:      latencyDbName,
+		DbName:             dbName,
 		DatabaseEnabled:    databaseEnabled,
 		PingInterval:       pingInterval,
 		IncludedNamespaces: includedNamespaces,

@@ -2,6 +2,8 @@ package scheduler
 
 import (
 	"fmt"
+	"log"
+	"time"
 
 	"github.com/b0gdanp3trovic/proxima-scheduler/util"
 	"k8s.io/client-go/kubernetes"
@@ -14,9 +16,10 @@ type ScoresWorker struct {
 	EdgeWeightsInitialized bool
 	DbScores               util.Database
 	DbPing                 util.Database
+	ScoringInterval        time.Duration
 }
 
-func NewScoresWorker(clientset *kubernetes.Clientset, dbScores util.Database, dbPing util.Database) *ScoresWorker {
+func NewScoresWorker(clientset *kubernetes.Clientset, dbScores util.Database, dbPing util.Database, scoringInterval time.Duration) *ScoresWorker {
 	return &ScoresWorker{
 		Clientset:              clientset,
 		Scores:                 make(map[string]float64),
@@ -24,6 +27,7 @@ func NewScoresWorker(clientset *kubernetes.Clientset, dbScores util.Database, db
 		EdgeWeightsInitialized: false,
 		DbScores:               dbScores,
 		DbPing:                 dbPing,
+		ScoringInterval:        scoringInterval,
 	}
 }
 
@@ -69,4 +73,17 @@ func (sw *ScoresWorker) scoreNodes() {
 	if err != nil {
 		fmt.Printf("Error saving node scores: %v\n", err)
 	}
+}
+
+func (sw *ScoresWorker) Start() {
+	log.Printf("Starting scores worker...")
+	ticker := time.NewTicker(sw.ScoringInterval)
+	defer ticker.Stop()
+
+	go func() {
+		for range ticker.C {
+			log.Println("Scoring nodes...")
+			sw.scoreNodes()
+		}
+	}()
 }

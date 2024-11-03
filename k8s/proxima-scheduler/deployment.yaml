@@ -34,10 +34,16 @@ spec:
           value: "true"
         - name: PING_INTERVAL
           value: "10s"
+        - name: SCORING_INTERVAL
+          value: "30s"
         - name: INCLUDED_NAMESPACES
           value: "default"
         - name: INFLUXDB_ADDRESS
           value: "http://influxdb-service.influx.svc.cluster.local:8086"
+        - name: INFLUXDB_DB_NAME
+          value: "proxima_scheduler"
+        - name: INFLUXDB_DB_SCORING
+          value: "score_db"
       serviceAccountName: proxima-scheduler-sa
       restartPolicy: Always
 

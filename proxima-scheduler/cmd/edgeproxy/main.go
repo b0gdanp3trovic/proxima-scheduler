@@ -23,17 +23,15 @@ func main() {
 		os.Exit(1)
 	}
 
-	influxDbLatency := util.NewInfluxDB(influxClient, cfg.LatencyDbName)
+	influxDb := util.NewInfluxDB(influxClient, cfg.DbName)
 
-	latencyWorker := edgeproxy.NewLatencyWorker(100, influxDbLatency, cfg.NodeIP)
+	latencyWorker := edgeproxy.NewLatencyWorker(100, influxDb, cfg.NodeIP)
 	latencyWorker.Start()
-
-	influxDbPing := util.NewInfluxDB(influxClient, cfg.PingDbName)
 
 	// TODO - change
 	cacheDuration := 10 * time.Second
 
-	edgeProxy := edgeproxy.NewEdgeProxy(cfg.ConsulURL, latencyWorker, influxDbPing, cacheDuration)
+	edgeProxy := edgeproxy.NewEdgeProxy(cfg.ConsulURL, latencyWorker, influxDb, cacheDuration)
 	edgeProxy.Run()
 
 	// Block the function from exiting
