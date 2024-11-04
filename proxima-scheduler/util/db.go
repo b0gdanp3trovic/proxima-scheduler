@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	client "github.com/influxdata/influxdb1-client/v2"
@@ -22,6 +23,7 @@ type Database interface {
 type InfluxDB struct {
 	DatabaseName string
 	Client       client.Client
+	initOnce     sync.Once
 }
 
 type NodeLatencies map[string]float64
@@ -42,15 +44,19 @@ func NewInfluxDB(client client.Client, databaseName string) (*InfluxDB, error) {
 }
 
 func (db *InfluxDB) createDbIfNotExists() error {
-	q := client.NewQuery(fmt.Sprintf("CREATE DATABASE %s", db.DatabaseName), "", "")
-	response, err := db.Client.Query(q)
-	if err != nil {
-		return fmt.Errorf("failed to execute database creation query: %w", err)
-	}
-	if response.Error() != nil {
-		return fmt.Errorf("failed to create database %s: %w", db.DatabaseName, response.Error())
-	}
-	return nil
+	var err error
+	db.initOnce.Do(func() {
+		q := client.NewQuery(fmt.Sprintf("CREATE DATABASE %s", db.DatabaseName), "", "")
+		response, queryErr := db.Client.Query(q)
+		if queryErr != nil {
+			err = fmt.Errorf("failed to execute database creation query: %w", queryErr)
+			return
+		}
+		if response.Error() != nil {
+			err = fmt.Errorf("failed to create database %s: %w", db.DatabaseName, response.Error())
+		}
+	})
+	return err
 }
 
 func (db *InfluxDB) SavePingTime(latencies map[string]time.Duration, edgeProxyAddress string) error {
