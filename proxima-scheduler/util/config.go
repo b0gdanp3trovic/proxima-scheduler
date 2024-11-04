@@ -13,6 +13,7 @@ type Config struct {
 	DbName             string
 	DatabaseEnabled    bool
 	PingInterval       time.Duration
+	ScoringInterval    time.Duration
 	IncludedNamespaces []string
 	SchedulerName      string
 	NodeIP             string
@@ -26,6 +27,7 @@ func LoadConfig() *Config {
 	dbName := getEnv("INFLUXDB_DB_NAME", "proxima_scheduler")
 	databaseEnabled := getEnvAsBool("DATABASE_ENABLED", true)
 	pingInterval := getEnvAsDuration("PING_INTERVAL", 10*time.Second)
+	scoringInterval := getEnvAsDuration("SCORING_INTERVAL", 30*time.Second)
 	includedNamespaces := parseIncludedNamespaces("INCLUDED_NAMESPACES", []string{"default"})
 	schedulerName := getEnv("SCHEDULER_NAME", "proxima-scheduler")
 	nodeIP := getEnv("NODE_IP", "")
@@ -38,6 +40,7 @@ func LoadConfig() *Config {
 		DbName:             dbName,
 		DatabaseEnabled:    databaseEnabled,
 		PingInterval:       pingInterval,
+		ScoringInterval:    scoringInterval,
 		IncludedNamespaces: includedNamespaces,
 		SchedulerName:      schedulerName,
 		NodeIP:             nodeIP,

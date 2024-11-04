@@ -35,7 +35,7 @@ func main() {
 		log.Fatalf("Failed to initialize influx db: %v", err)
 	}
 
-	scheduler, err := scheduler.NewScheduler(cfg.SchedulerName, cfg.IncludedNamespaces, clientset, influxDb)
+	schedulerWorker, err := scheduler.NewScheduler(cfg.SchedulerName, cfg.IncludedNamespaces, clientset, influxDb)
 
 	if err != nil {
 		log.Fatalf("Failed to create scheduler: %v", err)
@@ -45,9 +45,13 @@ func main() {
 	fmt.Println("Scheduler successfully configured.")
 
 	// Start the scheduler
-	go scheduler.Run()
-
+	schedulerWorker.Run()
 	fmt.Println("Run scheduler.")
+
+	scoresWorker := scheduler.NewScoresWorker(clientset, influxDb, cfg.ScoringInterval)
+	scoresWorker.Run()
+
+	fmt.Println("Run scores worker.")
 
 	// Block the function from exiting
 	select {}

@@ -14,19 +14,17 @@ type ScoresWorker struct {
 	Scores                 map[string]float64
 	EdgeWeights            map[string]float64
 	EdgeWeightsInitialized bool
-	DbScores               util.Database
-	DbPing                 util.Database
+	Db                     util.Database
 	ScoringInterval        time.Duration
 }
 
-func NewScoresWorker(clientset *kubernetes.Clientset, dbScores util.Database, dbPing util.Database, scoringInterval time.Duration) *ScoresWorker {
+func NewScoresWorker(clientset *kubernetes.Clientset, db *util.InfluxDB, scoringInterval time.Duration) *ScoresWorker {
 	return &ScoresWorker{
 		Clientset:              clientset,
 		Scores:                 make(map[string]float64),
 		EdgeWeights:            make(map[string]float64),
 		EdgeWeightsInitialized: false,
-		DbScores:               dbScores,
-		DbPing:                 dbPing,
+		Db:                     db,
 		ScoringInterval:        scoringInterval,
 	}
 }
@@ -49,7 +47,7 @@ func (sw *ScoresWorker) initializeEdgeWeights(nodeLatenciesByEdgeProxy util.Edge
 }
 
 func (sw *ScoresWorker) scoreNodes() {
-	nodeLatenciesByEdgeProxy, err := sw.DbPing.GetAveragePingTimeByEdges()
+	nodeLatenciesByEdgeProxy, err := sw.Db.GetAveragePingTimeByEdges()
 	if err != nil {
 		fmt.Printf("Error obtaining ping times: %v\n", err)
 		return
@@ -69,13 +67,13 @@ func (sw *ScoresWorker) scoreNodes() {
 		}
 	}
 
-	err = sw.DbScores.SaveNodeScores(sw.Scores)
+	err = sw.Db.SaveNodeScores(sw.Scores)
 	if err != nil {
 		fmt.Printf("Error saving node scores: %v\n", err)
 	}
 }
 
-func (sw *ScoresWorker) Start() {
+func (sw *ScoresWorker) Run() {
 	log.Printf("Starting scores worker...")
 	ticker := time.NewTicker(sw.ScoringInterval)
 	defer ticker.Stop()
