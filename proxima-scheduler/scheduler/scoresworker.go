@@ -71,6 +71,8 @@ func (sw *ScoresWorker) scoreNodes() {
 	if err != nil {
 		fmt.Printf("Error saving node scores: %v\n", err)
 	}
+
+	fmt.Printf("Saved node scores.")
 }
 
 func (sw *ScoresWorker) Run() {
