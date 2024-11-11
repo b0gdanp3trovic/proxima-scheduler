@@ -94,7 +94,7 @@ func (sw *ScoresWorker) scoreNodes() {
 
 func sigmoidScore(latency, threshold, scale float64) float64 {
 	// Sigmoid scoring function
-	return 1 / (1 + math.Exp(scale*(threshold-latency)))
+	return 1 / (1 + math.Exp(-scale*(threshold-latency)))
 }
 
 func (sw *ScoresWorker) Run() {
