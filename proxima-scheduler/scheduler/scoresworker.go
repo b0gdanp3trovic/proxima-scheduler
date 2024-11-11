@@ -64,6 +64,8 @@ func (sw *ScoresWorker) scoreNodes() {
 
 	rawLatencies := make(map[string]float64)
 
+	threshold := 50.0
+	scale := -0.1
 	for edgeProxy, latencies := range nodeLatenciesByEdgeProxy {
 		edgeProxyWeight, exists := sw.EdgeWeights[edgeProxy]
 		if !exists {
@@ -76,15 +78,9 @@ func (sw *ScoresWorker) scoreNodes() {
 		}
 	}
 
-	minLatency, maxLatency := findMinMax(rawLatencies)
 	for nodeIP, latency := range rawLatencies {
-		if maxLatency > minLatency {
-			normalizedScore := 1 - ((latency - minLatency) / (maxLatency - minLatency))
-			sw.Scores[nodeIP] = normalizedScore
-			log.Printf("Normalized score for node %s: %f\n", nodeIP, normalizedScore)
-		} else {
-			sw.Scores[nodeIP] = 1
-		}
+		sw.Scores[nodeIP] = sigmoidScore(latency, threshold, scale)
+		log.Printf("Sigmoid score for node %s: %f\n", nodeIP, sw.Scores[nodeIP])
 	}
 
 	err = sw.Db.SaveNodeScores(sw.Scores)
@@ -95,18 +91,9 @@ func (sw *ScoresWorker) scoreNodes() {
 	fmt.Printf("Saved node scores.")
 }
 
-func findMinMax(values map[string]float64) (float64, float64) {
-	min := math.MaxFloat64
-	max := -math.MaxFloat64
-	for _, value := range values {
-		if value < min {
-			min = value
-		}
-		if value > max {
-			max = value
-		}
-	}
-	return min, max
+func sigmoidScore(latency, threshold, scale float64) float64 {
+	// Sigmoid scoring function
+	return 1 / (1 + math.Exp(scale*(latency-threshold)))
 }
 
 func (sw *ScoresWorker) Run() {
