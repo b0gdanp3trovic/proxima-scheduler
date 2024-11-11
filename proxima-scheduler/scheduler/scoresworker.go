@@ -64,7 +64,7 @@ func (sw *ScoresWorker) scoreNodes() {
 
 	rawLatencies := make(map[string]float64)
 
-	threshold := 50.0
+	threshold := 5
 	scale := -0.1
 	for edgeProxy, latencies := range nodeLatenciesByEdgeProxy {
 		edgeProxyWeight, exists := sw.EdgeWeights[edgeProxy]
