@@ -42,28 +42,36 @@ func (sw *ScoresWorker) initializeEdgeWeights(nodeLatenciesByEdgeProxy util.Edge
 	}
 
 	sw.EdgeWeightsInitialized = true
-	fmt.Println("Edge weights initialized:", sw.EdgeWeights)
+	log.Printf("Edge weights initialized: %v\n", sw.EdgeWeights)
 	return nil
 }
 
 func (sw *ScoresWorker) scoreNodes() {
 	nodeLatenciesByEdgeProxy, err := sw.Db.GetAveragePingTimeByEdges()
 	if err != nil {
-		fmt.Printf("Error obtaining ping times: %v\n", err)
+		log.Printf("Error obtaining ping times: %v\n", err)
 		return
 	}
+	log.Printf("Fetched node latencies by edge proxy: %v\n", nodeLatenciesByEdgeProxy)
 
-	if sw.EdgeWeightsInitialized {
-		sw.initializeEdgeWeights(nodeLatenciesByEdgeProxy)
+	if !sw.EdgeWeightsInitialized {
+		if err := sw.initializeEdgeWeights(nodeLatenciesByEdgeProxy); err != nil {
+			log.Printf("Error initializing edge weights: %v\n", err)
+			return
+		}
 	}
 
 	for edgeProxy, latencies := range nodeLatenciesByEdgeProxy {
-		edgeProxyWeight := sw.EdgeWeights[edgeProxy]
+		edgeProxyWeight, exists := sw.EdgeWeights[edgeProxy]
+		if !exists {
+			log.Printf("Warning: Edge proxy %s has no initialized weight, skipping...", edgeProxy)
+			continue
+		}
 
 		for nodeIP, latency := range latencies {
 			score := 1 - edgeProxyWeight*latency
-
 			sw.Scores[nodeIP] = score
+			log.Printf("Calculated score for node %s via edge proxy %s: %f\n", nodeIP, edgeProxy, score)
 		}
 	}
 
