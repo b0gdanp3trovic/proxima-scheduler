@@ -3,6 +3,7 @@ package scheduler
 import (
 	"fmt"
 	"log"
+	"math"
 	"time"
 
 	"github.com/b0gdanp3trovic/proxima-scheduler/util"
@@ -61,6 +62,8 @@ func (sw *ScoresWorker) scoreNodes() {
 		}
 	}
 
+	rawLatencies := make(map[string]float64)
+
 	for edgeProxy, latencies := range nodeLatenciesByEdgeProxy {
 		edgeProxyWeight, exists := sw.EdgeWeights[edgeProxy]
 		if !exists {
@@ -69,9 +72,18 @@ func (sw *ScoresWorker) scoreNodes() {
 		}
 
 		for nodeIP, latency := range latencies {
-			score := 1 - edgeProxyWeight*latency
-			sw.Scores[nodeIP] = score
-			log.Printf("Calculated score for node %s via edge proxy %s: %f\n", nodeIP, edgeProxy, score)
+			rawLatencies[nodeIP] += edgeProxyWeight * latency
+		}
+	}
+
+	minLatency, maxLatency := findMinMax(rawLatencies)
+	for nodeIP, latency := range rawLatencies {
+		if maxLatency > minLatency {
+			normalizedScore := 1 - ((latency - minLatency) / (maxLatency - minLatency))
+			sw.Scores[nodeIP] = normalizedScore
+			log.Printf("Normalized score for node %s: %f\n", nodeIP, normalizedScore)
+		} else {
+			sw.Scores[nodeIP] = 1
 		}
 	}
 
@@ -81,6 +93,20 @@ func (sw *ScoresWorker) scoreNodes() {
 	}
 
 	fmt.Printf("Saved node scores.")
+}
+
+func findMinMax(values map[string]float64) (float64, float64) {
+	min := math.MaxFloat64
+	max := -math.MaxFloat64
+	for _, value := range values {
+		if value < min {
+			min = value
+		}
+		if value > max {
+			max = value
+		}
+	}
+	return min, max
 }
 
 func (sw *ScoresWorker) Run() {
