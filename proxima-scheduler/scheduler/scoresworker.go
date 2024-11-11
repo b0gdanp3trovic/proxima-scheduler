@@ -89,6 +89,7 @@ func (sw *ScoresWorker) Run() {
 	defer ticker.Stop()
 
 	go func() {
+		log.Println("Starting ticker...")
 		for range ticker.C {
 			log.Println("Scoring nodes...")
 			sw.scoreNodes()
