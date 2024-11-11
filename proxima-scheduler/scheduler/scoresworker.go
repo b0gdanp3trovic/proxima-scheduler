@@ -85,11 +85,11 @@ func (sw *ScoresWorker) scoreNodes() {
 
 func (sw *ScoresWorker) Run() {
 	log.Printf("Starting scores worker...")
-	ticker := time.NewTicker(sw.ScoringInterval)
-	defer ticker.Stop()
 
 	go func() {
-		log.Println("Starting ticker...")
+		ticker := time.NewTicker(sw.ScoringInterval)
+		defer ticker.Stop()
+
 		for range ticker.C {
 			log.Println("Scoring nodes...")
 			sw.scoreNodes()
