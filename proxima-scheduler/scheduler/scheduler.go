@@ -77,7 +77,8 @@ func (s *Scheduler) schedulePod(pod *v1.Pod) {
 
 	// TODO: enable config option for the logic behind selecting nodes
 	// selectedNode := selectNodeBasedOnCapacity(s.Clientset, nodes, pod)
-	selectedNode, err := selectNodeBasedOnLatency(s.Clientset, nodes, pod, s.DB)
+	// selectedNode := selectNodeBasedOnScore(s.Clientset, nodes, pod, s.DB)
+	selectedNode, err := selectNodeBasedOnScore(s.Clientset, nodes, pod, s.DB)
 
 	if err != nil {
 		fmt.Printf("Error selecting node for pod %s: %v\n", pod.GetName(), err)
