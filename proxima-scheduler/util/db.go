@@ -15,6 +15,7 @@ type Database interface {
 	SavePingTime(latencies map[string]time.Duration, edgeProxyAddress string) error
 	GetAveragePingTime() (NodeLatencies, error)
 	GetAveragePingTimeByEdges() (EdgeProxyToNodeLatencies, error)
+	GetNodeScores() (NodeScores, error)
 	SaveRequestLatency(podURL string, nodeIP string, edgeproxyNodeIP string, latency time.Duration) error
 	SaveNodeScores(scores map[string]float64) error
 	createDbIfNotExists() error
@@ -29,6 +30,8 @@ type InfluxDB struct {
 type NodeLatencies map[string]float64
 
 type EdgeProxyToNodeLatencies map[string]map[string]float64
+
+type NodeScores map[string]float64
 
 func NewInfluxDB(client client.Client, databaseName string) (*InfluxDB, error) {
 	db := &InfluxDB{
@@ -197,6 +200,41 @@ func (db *InfluxDB) GetAveragePingTimeByEdges() (EdgeProxyToNodeLatencies, error
 	return result, nil
 }
 
+func (db *InfluxDB) GetNodeScores() (NodeScores, error) {
+	query := fmt.Sprintf(`
+		SELECT LAST("score")
+		FROM %s.autogen.node_scores
+		GROUP BY "node"
+	`, db.DatabaseName)
+
+	q := client.NewQuery(query, db.DatabaseName, "s")
+	response, err := db.Client.Query(q)
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to query node scores: %w", err)
+	}
+
+	if response.Error() != nil {
+		return nil, fmt.Errorf("query response error: %w", response.Error())
+	}
+
+	scores := make(NodeScores)
+	for _, row := range response.Results[0].Series {
+		node := strings.TrimSpace(strings.ToLower(row.Tags["node"]))
+
+		if len(row.Values) > 0 {
+			score, err := parseScore(row.Values[0][1], node)
+			if err != nil {
+				fmt.Printf("Error parsing score for node %s: %v\n", node, err)
+				continue
+			}
+			scores[node] = score
+		}
+	}
+
+	return scores, nil
+}
+
 func (db *InfluxDB) SaveNodeScores(scores map[string]float64) error {
 	bp, err := client.NewBatchPoints(client.BatchPointsConfig{
 		Database:  db.DatabaseName,
@@ -239,5 +277,19 @@ func parseLatency(latencyInterface interface{}, node string) (float64, error) {
 		return latencyInterface.(json.Number).Float64()
 	default:
 		return 0, fmt.Errorf("unexpected type for latency value on node %s: %T", node, latencyInterface)
+	}
+}
+
+func parseScore(scoreInterface interface{}, node string) (float64, error) {
+	switch scoreInterface.(type) {
+	case float64:
+		return scoreInterface.(float64), nil
+	case string:
+		scoreStr := scoreInterface.(string)
+		return strconv.ParseFloat(scoreStr, 64)
+	case json.Number:
+		return scoreInterface.(json.Number).Float64()
+	default:
+		return 0, fmt.Errorf("unexpected type for score value on node %s: %T", node, scoreInterface)
 	}
 }

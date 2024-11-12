@@ -60,6 +60,43 @@ func selectNodeBasedOnLatency(clientset *kubernetes.Clientset, nodes *v1.NodeLis
 	return selectedNode, nil
 }
 
+func selectNodeBasedOnScore(clientset *kubernetes.Clientset, nodes *v1.NodeList, pod *v1.Pod, db util.Database) (*string, error) {
+	nodeScores, err := db.GetNodeScores()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get node scores: %v", err)
+	}
+
+	var selectedNode *string
+	highestScore := -math.MaxFloat64
+
+	for _, node := range nodes.Items {
+		nodeAddress := node.Status.Addresses[0].Address
+
+		score, exists := nodeScores[nodeAddress]
+		if !exists {
+			fmt.Printf("Node %s does not have score data, proceeding...\n", nodeAddress)
+			continue
+		}
+
+		if !hasEnoughCapacity(clientset, &node, pod) {
+			fmt.Printf("Node %s does not have enough capacity, proceeding...\n", nodeAddress)
+			continue
+		}
+
+		if score > highestScore {
+			highestScore = score
+			selectedNode = &nodeAddress
+		}
+	}
+
+	if selectedNode == nil {
+		return nil, fmt.Errorf("no suitable node found for pod %s", pod.Name)
+	}
+
+	fmt.Printf("Selected node %s with score %f\n", *selectedNode, highestScore)
+	return selectedNode, nil
+}
+
 func hasEnoughCapacity(clientset *kubernetes.Clientset, node *v1.Node, pod *v1.Pod) bool {
 	nodeResources := node.Status.Allocatable
 
