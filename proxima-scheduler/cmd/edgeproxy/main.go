@@ -34,7 +34,7 @@ func main() {
 	// TODO - change
 	cacheDuration := 10 * time.Second
 
-	edgeProxy := edgeproxy.NewEdgeProxy(cfg.ConsulURL, latencyWorker, influxDb, cacheDuration)
+	edgeProxy := edgeproxy.NewEdgeProxy(cfg.ConsulURL, latencyWorker, influxDb, cacheDuration, cfg.NodeIP)
 	edgeProxy.Run()
 
 	// Block the function from exiting

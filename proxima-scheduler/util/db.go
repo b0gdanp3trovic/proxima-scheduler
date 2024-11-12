@@ -15,6 +15,7 @@ type Database interface {
 	SavePingTime(latencies map[string]time.Duration, edgeProxyAddress string) error
 	GetAveragePingTime() (NodeLatencies, error)
 	GetAveragePingTimeByEdges() (EdgeProxyToNodeLatencies, error)
+	GetLatenciesForEdgeNode(edgeProxyAddress string) (NodeLatencies, error)
 	GetNodeScores() (NodeScores, error)
 	SaveRequestLatency(podURL string, nodeIP string, edgeproxyNodeIP string, latency time.Duration) error
 	SaveNodeScores(scores map[string]float64) error
@@ -198,6 +199,42 @@ func (db *InfluxDB) GetAveragePingTimeByEdges() (EdgeProxyToNodeLatencies, error
 	}
 
 	return result, nil
+}
+
+func (db *InfluxDB) GetLatenciesForEdgeNode(edgeProxyAddress string) (NodeLatencies, error) {
+	query := fmt.Sprintf(`
+		SELECT "latency_ms"
+		FROM %s.autogen.ping_times
+		WHERE "edge_proxy" = '%s'
+	`, db.DatabaseName, edgeProxyAddress)
+
+	q := client.NewQuery(query, db.DatabaseName, "s")
+	response, err := db.Client.Query(q)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query latencies for edge node %s: %w", edgeProxyAddress, err)
+	}
+
+	if response.Error() != nil {
+		return nil, fmt.Errorf("query response error for edge node %s: %w", edgeProxyAddress, response.Error())
+	}
+
+	latencies := make(NodeLatencies)
+	for _, row := range response.Results[0].Series {
+		node := strings.TrimSpace(strings.ToLower(row.Tags["node"]))
+
+		for _, value := range row.Values {
+			if len(value) > 1 {
+				latency, err := parseLatency(value[1], node)
+				if err != nil {
+					fmt.Printf("Error parsing latency for node %s and edge proxy %s: %v\n", node, edgeProxyAddress, err)
+					continue
+				}
+				latencies[node] = latency
+			}
+		}
+	}
+
+	return latencies, nil
 }
 
 func (db *InfluxDB) GetNodeScores() (NodeScores, error) {

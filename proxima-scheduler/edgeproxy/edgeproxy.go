@@ -30,6 +30,7 @@ type EdgeProxy struct {
 	cache         map[string]cachedPod
 	cacheMutex    sync.RWMutex
 	cacheDuration time.Duration
+	NodeIP        string
 }
 
 type cachedPod struct {
@@ -37,7 +38,17 @@ type cachedPod struct {
 	expiration time.Time
 }
 
-func NewEdgeProxy(consulAddress string, worker *LatencyWorker, db util.Database, cacheDuration time.Duration) *EdgeProxy {
+type responseRecorder struct {
+	http.ResponseWriter
+	statusCode int
+}
+
+func (rec *responseRecorder) WriteHeader(statusCode int) {
+	rec.statusCode = statusCode
+	rec.ResponseWriter.WriteHeader(statusCode)
+}
+
+func NewEdgeProxy(consulAddress string, worker *LatencyWorker, db util.Database, cacheDuration time.Duration, nodeIP string) *EdgeProxy {
 	return &EdgeProxy{
 		proxy: &httputil.ReverseProxy{
 			Director: func(req *http.Request) {
@@ -80,6 +91,7 @@ func NewEdgeProxy(consulAddress string, worker *LatencyWorker, db util.Database,
 		database:      db,
 		cache:         make(map[string]cachedPod),
 		cacheDuration: cacheDuration,
+		NodeIP:        nodeIP,
 	}
 }
 
@@ -120,7 +132,7 @@ func (ep *EdgeProxy) getBestPod(serviceName string) (ConsulServiceInstance, erro
 		return ConsulServiceInstance{}, fmt.Errorf("failed to obtain pods from Consul")
 	}
 
-	averageLatencies, err := ep.database.GetAveragePingTime()
+	latenciesByEdge, err := ep.database.GetLatenciesForEdgeNode(ep.NodeIP)
 	if err != nil {
 		return ConsulServiceInstance{}, fmt.Errorf("Failed to retrieve average latencies.")
 	}
@@ -135,9 +147,9 @@ func (ep *EdgeProxy) getBestPod(serviceName string) (ConsulServiceInstance, erro
 			continue
 		}
 
-		latency, err := getLatencyForNode(nodeIP, averageLatencies)
-		if err != nil {
-			log.Printf("Failed to get latency for node %s: %v", nodeIP, err)
+		latency, exists := latenciesByEdge[nodeIP]
+		if !exists {
+			log.Printf("No latency data available for node %s", nodeIP)
 			continue
 		}
 
@@ -200,10 +212,23 @@ func preprocessRequest(ep *EdgeProxy) http.Handler {
 		ctx = context.WithValue(ctx, "node_ip", nodeIP)
 		ctx = context.WithValue(ctx, "start_time", time.Now())
 
+		recorder := &responseRecorder{ResponseWriter: w, statusCode: http.StatusOK}
 		log.Printf("Forwarding request to pod %s on node %s", podUrl, nodeIP)
+		ep.proxy.ServeHTTP(recorder, r.WithContext(ctx))
 
-		ep.proxy.ServeHTTP(w, r.WithContext(ctx))
+		if recorder.statusCode >= http.StatusInternalServerError {
+			log.Printf("Request to pod %s failed with status %d, invalidating cache for service %s", podUrl, recorder.statusCode, serviceName)
+			ep.invalidateCache(serviceName)
+			http.Error(w, "Failed to forward request to pod", http.StatusBadGateway)
+		}
 	})
+}
+
+func (ep *EdgeProxy) invalidateCache(serviceName string) {
+	ep.cacheMutex.Lock()
+	defer ep.cacheMutex.Unlock()
+	delete(ep.cache, serviceName)
+	log.Printf("Cache invalidated for service %s", serviceName)
 }
 
 func (ep *EdgeProxy) Run() {
