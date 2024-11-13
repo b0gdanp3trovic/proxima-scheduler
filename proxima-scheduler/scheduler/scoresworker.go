@@ -65,8 +65,8 @@ func (sw *ScoresWorker) scoreNodes() {
 	rawLatencies := make(map[string]float64)
 
 	// Perform Sigmoid normalization
-	threshold := 0.85
-	scale := 15.0
+	threshold := 1.0
+	scale := 5.0
 	for edgeProxy, latencies := range nodeLatenciesByEdgeProxy {
 		edgeProxyWeight, exists := sw.EdgeWeights[edgeProxy]
 		if !exists {
