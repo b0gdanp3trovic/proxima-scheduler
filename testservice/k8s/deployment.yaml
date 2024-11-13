@@ -15,6 +15,7 @@ spec:
       annotations:
         consul-register: "true"
     spec:
+      schedulerName: proxima-scheduler
       containers:
       - name: test-flask-service-container
         image: bogdanb0gdan/test-flask-service:latest

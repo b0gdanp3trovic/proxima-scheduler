@@ -86,10 +86,10 @@ func (sw *ScoresWorker) scoreNodes() {
 
 	err = sw.Db.SaveNodeScores(sw.Scores)
 	if err != nil {
-		fmt.Printf("Error saving node scores: %v\n", err)
+		log.Printf("Error saving node scores: %v\n", err)
 	}
 
-	fmt.Printf("Saved node scores.")
+	log.Printf("Saved node scores.")
 }
 
 func sigmoidScore(latency, threshold, scale float64) float64 {

@@ -197,6 +197,7 @@ func preprocessRequest(ep *EdgeProxy) http.Handler {
 		// Select best pod
 		pod, err := ep.getBestPod(serviceName)
 		if err != nil {
+			log.Printf("Failed obtaining the best pod: %v", err)
 			http.Error(w, "Failed obtaining the best pod.", http.StatusInternalServerError)
 			return
 		}
