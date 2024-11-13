@@ -57,9 +57,10 @@ func (h *AdmissionHandler) MutationHandler(w http.ResponseWriter, r *http.Reques
 	}
 
 	if value, ok := pod.Annotations["consul-register"]; ok && value == "true" {
-		fmt.Printf("Adding consul-register init container to pod %s\n", pod.Name)
+		fmt.Printf("Adding consul-register sidecar container to pod %s\n", pod.Name)
 
-		patchBytes, err := createInitContainerPatch(h.consulURL)
+		patchBytes, err := createSidecarContainerPatch(h.consulURL)
+
 		if err != nil {
 			http.Error(w, fmt.Sprintf("could not create JSON patch: %v", err), http.StatusInternalServerError)
 			return
@@ -95,14 +96,20 @@ func (h *AdmissionHandler) MutationHandler(w http.ResponseWriter, r *http.Reques
 	w.Write(respBytes)
 }
 
-func createInitContainerPatch(consulURL string) ([]byte, error) {
-	initContainer := corev1.Container{
+func createSidecarContainerPatch(consulURL string) ([]byte, error) {
+	sidecarContainer := corev1.Container{
 		Name:  "consul-register",
 		Image: "curlimages/curl:7.77.0",
 		Command: []string{
 			"sh",
 			"-c",
-			`curl --request PUT --data '{
+			`while [ -z "$POD_IP" ]; do
+				echo "Waiting for POD_IP...";
+				POD_IP=$(hostname -i);
+				sleep 2;
+			done;
+
+			curl --request PUT --data '{
 				"ID": "test-flask-service-'$POD_IP'",
 				"Name": "test-flask-service",
 				"Address": "'$POD_IP'",
@@ -113,7 +120,7 @@ func createInitContainerPatch(consulURL string) ([]byte, error) {
 				"Port": 8080,
 				"Check": {
 					"http": "http://'$POD_IP':8080",
-					"interval": "10s"
+					"interval": "10s",
 					"deregister_critical_service_after": "1m"
 				}
 			}' ` + consulURL + `/v1/agent/service/register`,
@@ -141,8 +148,8 @@ func createInitContainerPatch(consulURL string) ([]byte, error) {
 	patch := []map[string]interface{}{
 		{
 			"op":    "add",
-			"path":  "/spec/initContainers",
-			"value": []corev1.Container{initContainer},
+			"path":  "/spec/containers/-",
+			"value": sidecarContainer,
 		},
 	}
 
