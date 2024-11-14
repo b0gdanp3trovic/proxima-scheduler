@@ -49,7 +49,7 @@ func selectNodeBasedOnLatency(clientset *kubernetes.Clientset, nodes *v1.NodeLis
 
 		if latency < lowestLatency {
 			lowestLatency = latency
-			selectedNode = &nodeAddress
+			selectedNode = &node.Name
 		}
 	}
 
@@ -85,7 +85,7 @@ func selectNodeBasedOnScore(clientset *kubernetes.Clientset, nodes *v1.NodeList,
 
 		if score > highestScore {
 			highestScore = score
-			selectedNode = &nodeAddress
+			selectedNode = &node.Name
 		}
 	}
 
