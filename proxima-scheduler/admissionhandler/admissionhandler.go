@@ -148,7 +148,7 @@ func createSidecarContainerPatch(consulURL string) ([]byte, error) {
 	patch := []map[string]interface{}{
 		{
 			"op":    "add",
-			"path":  "/spec/containers",
+			"path":  "/spec/containers/-",
 			"value": []corev1.Container{sidecarContainer},
 		},
 	}
