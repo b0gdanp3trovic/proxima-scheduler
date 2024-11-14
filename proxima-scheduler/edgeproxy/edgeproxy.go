@@ -129,12 +129,12 @@ func (ep *EdgeProxy) getBestPod(serviceName string) (ConsulServiceInstance, erro
 
 	pods, err := getServicePodsFromConsul(serviceName, ep.consulAddress)
 	if err != nil || len(pods) == 0 {
-		return ConsulServiceInstance{}, fmt.Errorf("failed to obtain pods from Consul")
+		return ConsulServiceInstance{}, fmt.Errorf("failed to obtain pods from Consul: %v", err)
 	}
 
 	latenciesByEdge, err := ep.database.GetLatenciesForEdgeNode(ep.NodeIP)
 	if err != nil {
-		return ConsulServiceInstance{}, fmt.Errorf("Failed to retrieve average latencies.")
+		return ConsulServiceInstance{}, fmt.Errorf("Failed to retrieve average latencies: %v", err)
 	}
 
 	var bestPod ConsulServiceInstance
