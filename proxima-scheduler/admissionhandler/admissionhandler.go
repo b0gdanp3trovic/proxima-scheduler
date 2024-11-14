@@ -112,11 +112,17 @@ func (h *AdmissionHandler) MutationHandler(w http.ResponseWriter, r *http.Reques
 }
 
 func applyPatch(pod *corev1.Pod, patchBytes []byte) error {
-	patched, err := jsonpatch.MergePatch(pod, patchBytes)
+	originalPodJSON, err := json.Marshal(pod)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to marshal original pod: %v", err)
 	}
-	return json.Unmarshal(patched, pod)
+
+	patchedPodJSON, err := jsonpatch.MergePatch(originalPodJSON, patchBytes)
+	if err != nil {
+		return fmt.Errorf("failed to apply JSON patch: %v", err)
+	}
+
+	return json.Unmarshal(patchedPodJSON, pod)
 }
 
 func createSidecarContainerPatch(consulURL string) ([]byte, error) {
