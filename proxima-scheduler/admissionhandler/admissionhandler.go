@@ -104,27 +104,7 @@ func createSidecarContainerPatch(consulURL string) ([]byte, error) {
 		Command: []string{
 			"sh",
 			"-c",
-			`while [ -z "$POD_IP" ]; do
-				echo "Waiting for POD_IP...";
-				POD_IP=$(hostname -i);
-				sleep 2;
-			done;
-
-			curl --request PUT --data '{
-				"ID": "test-flask-service-'$POD_IP'",
-				"Name": "test-flask-service",
-				"Address": "'$POD_IP'",
-				"Meta": {
-					"node_ip": "'$NODE_IP'",
-					"pod_ip": "'$POD_IP'"
-				},
-				"Port": 8080,
-				"Check": {
-					"http": "http://'$POD_IP':8080",
-					"interval": "10s",
-					"deregister_critical_service_after": "1m"
-				}
-			}' ` + consulURL + `/v1/agent/service/register`,
+			"echo hi",
 		},
 		Env: []corev1.EnvVar{
 			{
