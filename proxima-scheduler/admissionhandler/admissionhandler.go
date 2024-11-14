@@ -6,7 +6,6 @@ import (
 	"io"
 	"net/http"
 
-	jsonpatch "github.com/evanphx/json-patch/v5"
 	admissionv1 "k8s.io/api/admission/v1"
 	corev1 "k8s.io/api/core/v1"
 
@@ -57,9 +56,9 @@ func (h *AdmissionHandler) MutationHandler(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	// Log the original pod JSON
-	originalPodJSON, _ := json.MarshalIndent(pod, "", "  ")
-	fmt.Printf("Original Pod JSON:\n%s\n", string(originalPodJSON))
+	// Print the original admission request container JSON
+	admissionRequestJSON, _ := json.MarshalIndent(pod, "", "  ")
+	fmt.Printf("Admission Request Container JSON:\n%s\n", string(admissionRequestJSON))
 
 	if value, ok := pod.Annotations["consul-register"]; ok && value == "true" {
 		fmt.Printf("Adding consul-register sidecar container to pod %s\n", pod.Name)
@@ -69,16 +68,6 @@ func (h *AdmissionHandler) MutationHandler(w http.ResponseWriter, r *http.Reques
 		if err != nil {
 			http.Error(w, fmt.Sprintf("could not create JSON patch: %v", err), http.StatusInternalServerError)
 			return
-		}
-
-		// Manually apply the patch to a copy of the pod to simulate the after state
-		patchedPod := pod.DeepCopy() // Copy the pod to keep the original intact
-		err = applyPatch(patchedPod, patchBytes)
-		if err != nil {
-			fmt.Printf("Error applying patch: %v\n", err)
-		} else {
-			patchedPodJSON, _ := json.MarshalIndent(patchedPod, "", "  ")
-			fmt.Printf("Modified Pod JSON:\n%s\n", string(patchedPodJSON))
 		}
 
 		admissionReviewResp.Response = &admissionv1.AdmissionResponse{
@@ -106,23 +95,11 @@ func (h *AdmissionHandler) MutationHandler(w http.ResponseWriter, r *http.Reques
 		http.Error(w, fmt.Sprintf("could not marshal response: %v", err), http.StatusInternalServerError)
 		return
 	}
+	fmt.Printf("Admission Response JSON:\n%s\n", string(respBytes))
+
 	fmt.Println("Finished processing admission request.")
 	w.Header().Set("Content-Type", "application/json")
 	w.Write(respBytes)
-}
-
-func applyPatch(pod *corev1.Pod, patchBytes []byte) error {
-	originalPodJSON, err := json.Marshal(pod)
-	if err != nil {
-		return fmt.Errorf("failed to marshal original pod: %v", err)
-	}
-
-	patchedPodJSON, err := jsonpatch.MergePatch(originalPodJSON, patchBytes)
-	if err != nil {
-		return fmt.Errorf("failed to apply JSON patch: %v", err)
-	}
-
-	return json.Unmarshal(patchedPodJSON, pod)
 }
 
 func createSidecarContainerPatch(consulURL string) ([]byte, error) {
