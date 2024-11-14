@@ -56,10 +56,6 @@ func (h *AdmissionHandler) MutationHandler(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	// Print the original admission request container JSON
-	admissionRequestJSON, _ := json.MarshalIndent(pod, "", "  ")
-	fmt.Printf("Admission Request Container JSON:\n%s\n", string(admissionRequestJSON))
-
 	if value, ok := pod.Annotations["consul-register"]; ok && value == "true" {
 		fmt.Printf("Adding consul-register sidecar container to pod %s\n", pod.Name)
 
@@ -95,7 +91,6 @@ func (h *AdmissionHandler) MutationHandler(w http.ResponseWriter, r *http.Reques
 		http.Error(w, fmt.Sprintf("could not marshal response: %v", err), http.StatusInternalServerError)
 		return
 	}
-	fmt.Printf("Admission Response JSON:\n%s\n", string(respBytes))
 
 	fmt.Println("Finished processing admission request.")
 	w.Header().Set("Content-Type", "application/json")
