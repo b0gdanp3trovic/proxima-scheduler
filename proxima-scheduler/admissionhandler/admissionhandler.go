@@ -155,7 +155,7 @@ func createSidecarContainerPatch(consulURL string) ([]byte, error) {
 		{
 			"op":    "add",
 			"path":  "/spec/containers/-",
-			"value": []corev1.Container{sidecarContainer},
+			"value": sidecarContainer,
 		},
 	}
 
