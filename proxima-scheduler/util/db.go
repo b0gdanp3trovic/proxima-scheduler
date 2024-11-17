@@ -16,7 +16,7 @@ type Database interface {
 	SavePingTime(latencies map[string]time.Duration, edgeProxyAddress string) error
 	GetAveragePingTime() (NodeLatencies, error)
 	GetAveragePingTimeByEdges() (EdgeProxyToNodeLatencies, error)
-	GetLatenciesForEdgeNode(edgeProxyAddress string) (NodeLatencies, error)
+	GetAverageLatenciesForEdge(edgeProxyAddress string) (NodeLatencies, error)
 	GetNodeScores() (NodeScores, error)
 	SaveRequestLatency(podURL string, nodeIP string, edgeproxyNodeIP string, latency time.Duration) error
 	SaveNodeScores(scores map[string]float64) error
@@ -168,7 +168,7 @@ func (db *InfluxDB) GetAveragePingTimeByEdges() (EdgeProxyToNodeLatencies, error
 	query := fmt.Sprintf(`
 		SELECT MEAN("latency_ms")
 		FROM %s.autogen.ping_times
-		WHERE time > now() - 30s
+		WHERE time > now() - 60s
 		GROUP BY "node", "edge_proxy"
 	`, db.DatabaseName)
 
@@ -206,7 +206,7 @@ func (db *InfluxDB) GetAveragePingTimeByEdges() (EdgeProxyToNodeLatencies, error
 	return result, nil
 }
 
-func (db *InfluxDB) GetLatenciesForEdgeNode(edgeProxyAddress string) (NodeLatencies, error) {
+func (db *InfluxDB) GetAverageLatenciesForEdge(edgeProxyAddress string) (NodeLatencies, error) {
 	query := fmt.Sprintf(`
 		SELECT MEAN("latency_ms")
 		FROM %s.autogen.ping_times
