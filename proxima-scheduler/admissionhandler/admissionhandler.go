@@ -113,7 +113,7 @@ func createInitContainerPatch(consulURL string) ([]byte, error) {
 				"Port": 8080,
 				"Check": {
 					"http": "http://'$POD_IP':8080",
-					"interval": "10s"
+					"interval": "10s",
 					"deregister_critical_service_after": "1m"
 				}
 			}' ` + consulURL + `/v1/agent/service/register`,
