@@ -146,24 +146,22 @@ func (p *Pinger) PingAll() {
 }
 
 func (p *Pinger) SaveLatenciesToDB() {
-	func (p *Pinger) SaveLatenciesToDB() {
-		if !p.DBEnabled {
-			log.Println("Database disabled, skipping database save.")
-			return
-		}
-	
-		if len(p.Latencies) == 0 {
-			log.Println("Empty latencies table, nothing to save.")
-			return
-		}
-	
-		log.Printf("Saving latencies to DB: %+v", p.Latencies)
-	
-		if err := p.DB.SavePingTime(p.Latencies, p.NodeIP); err != nil {
-			log.Printf("Failed to save latencies to the database: %v", err)
-		} else {
-			fmt.Println("Successfully saved latencies to the database.")
-		}
+	if !p.DBEnabled {
+		log.Println("Database disabled, skipping database save.")
+		return
+	}
+
+	if len(p.Latencies) == 0 {
+		log.Println("Empty latencies table, nothing to save.")
+		return
+	}
+
+	log.Printf("Saving latencies to DB: %+v", p.Latencies)
+
+	if err := p.DB.SavePingTime(p.Latencies, p.NodeIP); err != nil {
+		log.Printf("Failed to save latencies to the database: %v", err)
+	} else {
+		fmt.Println("Successfully saved latencies to the database.")
 	}
 }
 
