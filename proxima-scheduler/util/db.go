@@ -225,16 +225,20 @@ func (db *InfluxDB) GetLatenciesForEdgeNode(edgeProxyAddress string) (NodeLatenc
 
 	latencies := make(NodeLatencies)
 	for _, row := range response.Results[0].Series {
+		log.Printf("Processing series: %+v", row)
 		node := strings.TrimSpace(strings.ToLower(row.Tags["node"]))
 
 		for _, value := range row.Values {
+			log.Printf("Row values for node %s: %v", node, value)
 			if len(value) > 1 {
 				latency, err := parseLatency(value[1], node)
 				if err != nil {
-					fmt.Printf("Error parsing latency for node %s and edge proxy %s: %v\n", node, edgeProxyAddress, err)
+					log.Printf("Error parsing latency for node %s: %v", node, err)
 					continue
 				}
 				latencies[node] = latency
+			} else {
+				log.Printf("Insufficient values for node %s", node)
 			}
 		}
 	}
