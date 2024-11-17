@@ -208,7 +208,7 @@ func (db *InfluxDB) GetAveragePingTimeByEdges() (EdgeProxyToNodeLatencies, error
 
 func (db *InfluxDB) GetLatenciesForEdgeNode(edgeProxyAddress string) (NodeLatencies, error) {
 	query := fmt.Sprintf(`
-		SELECT "latency_ms"
+		SELECT "latency_ms", "node", "edge_proxy"
 		FROM %s.autogen.ping_times
 		WHERE "edge_proxy" = '%s'
 	`, db.DatabaseName, edgeProxyAddress)
