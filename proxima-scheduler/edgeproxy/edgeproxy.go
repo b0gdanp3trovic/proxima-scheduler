@@ -128,7 +128,12 @@ func (ep *EdgeProxy) getBestPod(serviceName string) (ConsulServiceInstance, erro
 	ep.cacheMutex.RUnlock()
 
 	pods, err := getServicePodsFromConsul(serviceName, ep.consulAddress)
-	if err != nil || len(pods) == 0 {
+
+	if len(pods) == 0 {
+		return ConsulServiceInstance{}, fmt.Errorf("No valid pods found on Consul")
+	}
+
+	if err != nil {
 		return ConsulServiceInstance{}, fmt.Errorf("failed to obtain pods from Consul: %v", err)
 	}
 
