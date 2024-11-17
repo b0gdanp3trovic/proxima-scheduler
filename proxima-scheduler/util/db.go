@@ -3,6 +3,7 @@ package util
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"strconv"
 	"strings"
 	"sync"
@@ -51,14 +52,18 @@ func (db *InfluxDB) createDbIfNotExists() error {
 	var err error
 	db.initOnce.Do(func() {
 		q := client.NewQuery(fmt.Sprintf("CREATE DATABASE %s", db.DatabaseName), "", "")
+		log.Printf("Executing database creation query: %s", q.Command)
 		response, queryErr := db.Client.Query(q)
 		if queryErr != nil {
 			err = fmt.Errorf("failed to execute database creation query: %w", queryErr)
+			log.Printf("Query execution error: %v", queryErr)
 			return
 		}
 		if response.Error() != nil {
 			err = fmt.Errorf("failed to create database %s: %w", db.DatabaseName, response.Error())
+			log.Printf("Query response error: %v", response.Error())
 		}
+		log.Printf("Database creation query completed successfully.")
 	})
 	return err
 }
