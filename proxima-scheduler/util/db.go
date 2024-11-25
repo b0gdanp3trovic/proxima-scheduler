@@ -17,6 +17,7 @@ type Database interface {
 	GetAveragePingTime() (NodeLatencies, error)
 	GetAveragePingTimeByEdges() (EdgeProxyToNodeLatencies, error)
 	GetAverageLatenciesForEdge(edgeProxyAddress string) (NodeLatencies, error)
+	SaveEdgeProxyMetricsForService(serviceName string, podURL string, edgeProxyIP string, avgLatency time.Duration, avgRPM float64) error
 	GetNodeScores() (NodeScores, error)
 	SaveRequestLatency(podURL string, nodeIP string, edgeproxyNodeIP string, latency time.Duration) error
 	SaveNodeScores(scores map[string]float64) error
@@ -308,6 +309,41 @@ func (db *InfluxDB) SaveNodeScores(scores map[string]float64) error {
 
 	if err := db.Client.Write(bp); err != nil {
 		return fmt.Errorf("failed to write batch points to InfluxDB: %w", err)
+	}
+
+	return nil
+}
+
+func (db *InfluxDB) SaveEdgeProxyMetricsForService(serviceName string, podURL string, edgeProxyIP string, avgLatency time.Duration, avgRPM float64) error {
+	bp, err := client.NewBatchPoints(client.BatchPointsConfig{
+		Database:  db.DatabaseName,
+		Precision: "s",
+	})
+
+	if err != nil {
+		return fmt.Errorf("failed to create batch points: %w", err)
+	}
+
+	tags := map[string]string{
+		"service":    serviceName,
+		"pod_url":    podURL,
+		"edge_proxy": edgeProxyIP,
+	}
+
+	fields := map[string]interface{}{
+		"avg_latency_ms": avgLatency.Seconds() * 1000,
+		"avg_rpm":        avgRPM,
+	}
+
+	pt, err := client.NewPoint("edge_proxy_service_metrics", tags, fields, time.Now())
+	if err != nil {
+		return fmt.Errorf("failed to create point for service %s, pod %s, and edge proxy %s: %w", serviceName, podURL, edgeProxyIP, err)
+	}
+
+	bp.AddPoint(pt)
+
+	if err := db.Client.Write(bp); err != nil {
+		return fmt.Errorf("failed to write metrics to InfluxDB: %w", err)
 	}
 
 	return nil

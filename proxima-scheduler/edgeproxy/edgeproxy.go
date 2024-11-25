@@ -31,6 +31,8 @@ type EdgeProxy struct {
 	cacheMutex    sync.RWMutex
 	cacheDuration time.Duration
 	NodeIP        string
+	requestCounts map[string]int
+	requestMutex  sync.Mutex
 }
 
 type cachedPod struct {
@@ -48,7 +50,7 @@ func (rec *responseRecorder) WriteHeader(statusCode int) {
 	rec.ResponseWriter.WriteHeader(statusCode)
 }
 
-func NewEdgeProxy(consulAddress string, worker *LatencyWorker, db util.Database, cacheDuration time.Duration, nodeIP string) *EdgeProxy {
+func NewEdgeProxy(consulAddress string, worker *MetricsWorker, db util.Database, cacheDuration time.Duration, nodeIP string) *EdgeProxy {
 	return &EdgeProxy{
 		proxy: &httputil.ReverseProxy{
 			Director: func(req *http.Request) {
@@ -76,7 +78,7 @@ func NewEdgeProxy(consulAddress string, worker *LatencyWorker, db util.Database,
 				nodeIP := resp.Request.Context().Value("node_ip").(string)
 				serviceName := resp.Request.URL.Path
 
-				worker.SendLatencyData(LatencyData{
+				worker.SendLatencyData(MetricsData{
 					ServiceName: serviceName,
 					PodURL:      podUrl,
 					NodeIP:      nodeIP,
