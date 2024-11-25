@@ -70,13 +70,18 @@ func NewEdgeProxy(consulAddress string, worker *MetricsWorker, db util.Database,
 				req.URL.Scheme = "http"
 				req.URL.Host = podUrl
 				log.Printf("Forwarding request to %s", podUrl)
+
+				// Save service name
+				ctx := req.Context()
+				ctx = context.WithValue(ctx, "service_name", parts[1])
+				req = req.WithContext(ctx)
 			},
 			ModifyResponse: func(resp *http.Response) error {
 				// Measure latency and log it
 				latency := time.Since(resp.Request.Context().Value("start_time").(time.Time))
 				podUrl := resp.Request.Context().Value("pod_url").(string)
 				nodeIP := resp.Request.Context().Value("node_ip").(string)
-				serviceName := resp.Request.URL.Path
+				serviceName := resp.Request.Context().Value("service_name").(string)
 
 				worker.SendLatencyData(MetricsData{
 					ServiceName: serviceName,
