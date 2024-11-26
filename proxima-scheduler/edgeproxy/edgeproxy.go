@@ -66,11 +66,9 @@ func NewEdgeProxy(consulAddress string, worker *MetricsWorker, db util.Database,
 					req.URL.Path = "/"
 				}
 
-				log.Printf("parts: %v", parts)
-
 				// Save service name
 				ctx := req.Context()
-				ctx = context.WithValue(ctx, "service_name", parts[1])
+				ctx = context.WithValue(ctx, "service_name", parts[0])
 				req = req.WithContext(ctx)
 
 				// Forward the request to the pod
