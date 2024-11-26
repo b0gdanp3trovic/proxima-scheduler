@@ -66,6 +66,10 @@ func NewEdgeProxy(consulAddress string, worker *MetricsWorker, db util.Database,
 					req.URL.Path = "/"
 				}
 
+				for i, part := range parts {
+					fmt.Printf("Index: %d, Value: %s\n", i, part)
+				}
+
 				// Save service name
 				ctx := req.Context()
 				ctx = context.WithValue(ctx, "service_name", parts[0])
