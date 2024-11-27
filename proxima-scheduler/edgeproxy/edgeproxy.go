@@ -66,10 +66,6 @@ func NewEdgeProxy(consulAddress string, worker *MetricsWorker, db util.Database,
 					req.URL.Path = "/"
 				}
 
-				for i, part := range parts {
-					fmt.Printf("Index: %d, Value: %s\n", i, part)
-				}
-
 				// Save service name in the header,
 				// context is not propagated from Director to ModifyResponse
 				req.Header.Set("X-Proxima-Service-Name", parts[1])
