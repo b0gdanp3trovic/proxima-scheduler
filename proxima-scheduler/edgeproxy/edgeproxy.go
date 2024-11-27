@@ -45,6 +45,15 @@ type responseRecorder struct {
 	statusCode int
 }
 
+var allowedServices = map[string]bool{
+	"test-flask-service": true,
+}
+
+func isServiceAllowed(serviceName string) bool {
+	_, exists := allowedServices[serviceName]
+	return exists
+}
+
 func (rec *responseRecorder) WriteHeader(statusCode int) {
 	rec.statusCode = statusCode
 	rec.ResponseWriter.WriteHeader(statusCode)
@@ -66,10 +75,6 @@ func NewEdgeProxy(consulAddress string, worker *MetricsWorker, db util.Database,
 					req.URL.Path = "/"
 				}
 
-				// Save service name in the header,
-				// context is not propagated from Director to ModifyResponse
-				req.Header.Set("X-Proxima-Service-Name", parts[1])
-
 				req.URL.Scheme = "http"
 				req.URL.Host = podUrl
 				log.Printf("Forwarding request to %s", podUrl)
@@ -84,8 +89,7 @@ func NewEdgeProxy(consulAddress string, worker *MetricsWorker, db util.Database,
 				latency := time.Since(resp.Request.Context().Value("start_time").(time.Time))
 				podUrl := resp.Request.Context().Value("pod_url").(string)
 				nodeIP := resp.Request.Context().Value("node_ip").(string)
-
-				serviceName := resp.Request.Header.Get("X-Proxima-Service-Name")
+				serviceName := resp.Request.Context().Value("service_name").(string)
 
 				worker.SendLatencyData(MetricsData{
 					ServiceName: serviceName,
@@ -210,6 +214,11 @@ func preprocessRequest(ep *EdgeProxy) http.Handler {
 
 		serviceName := parts[1]
 
+		if !isServiceAllowed(serviceName) {
+			http.Error(w, "Service not allowed", http.StatusForbidden)
+			return
+		}
+
 		// Select best pod
 		pod, err := ep.getBestPod(serviceName)
 		if err != nil {
@@ -228,6 +237,7 @@ func preprocessRequest(ep *EdgeProxy) http.Handler {
 		ctx := context.WithValue(r.Context(), "pod_url", podUrl)
 		ctx = context.WithValue(ctx, "node_ip", nodeIP)
 		ctx = context.WithValue(ctx, "start_time", time.Now())
+		ctx = context.WithValue(ctx, "service_name", serviceName)
 
 		recorder := &responseRecorder{ResponseWriter: w, statusCode: http.StatusOK}
 		log.Printf("Forwarding request to pod %s on node %s", podUrl, nodeIP)
