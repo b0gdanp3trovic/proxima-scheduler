@@ -70,10 +70,13 @@ func NewEdgeProxy(consulAddress string, worker *MetricsWorker, db util.Database,
 					fmt.Printf("Index: %d, Value: %s\n", i, part)
 				}
 
-				// Save service name
-				ctx := req.Context()
-				ctx = context.WithValue(ctx, "service_name", parts[1])
-				req = req.WithContext(ctx)
+				// Save service name in the header,
+				// context is not propagated from Director to ModifyResponse
+				req.Header.Set("X-Proxima-Service-Name", parts[1])
+
+				req.URL.Scheme = "http"
+				req.URL.Host = podUrl
+				log.Printf("Forwarding request to %s", podUrl)
 
 				// Forward the request to the pod
 				req.URL.Scheme = "http"
@@ -85,7 +88,8 @@ func NewEdgeProxy(consulAddress string, worker *MetricsWorker, db util.Database,
 				latency := time.Since(resp.Request.Context().Value("start_time").(time.Time))
 				podUrl := resp.Request.Context().Value("pod_url").(string)
 				nodeIP := resp.Request.Context().Value("node_ip").(string)
-				serviceName := resp.Request.Context().Value("service_name").(string)
+
+				serviceName := resp.Request.Header.Get("X-Proxima-Service-Name")
 
 				worker.SendLatencyData(MetricsData{
 					ServiceName: serviceName,
