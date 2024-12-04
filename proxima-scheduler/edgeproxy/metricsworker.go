@@ -88,9 +88,6 @@ func (mw *MetricsWorker) processMetrics() {
 }
 
 func (mw *MetricsWorker) calculateAverageRPM(metrics *ProxyPodMetrics) float64 {
-	mw.metricsMutex.Lock()
-	defer mw.metricsMutex.Unlock()
-
 	totalRequests := 0
 
 	for _, count := range metrics.RPMBuckets {
@@ -101,9 +98,6 @@ func (mw *MetricsWorker) calculateAverageRPM(metrics *ProxyPodMetrics) float64 {
 }
 
 func (mw *MetricsWorker) calculateAverageLatency(metrics *ProxyPodMetrics) time.Duration {
-	mw.metricsMutex.Lock()
-	defer mw.metricsMutex.Unlock()
-
 	totalLatency := time.Duration(0)
 	totalRequests := 0
 
