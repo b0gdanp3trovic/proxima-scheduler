@@ -18,9 +18,13 @@ type MetricsData struct {
 }
 
 type ProxyPodMetrics struct {
-	TotalLatency time.Duration
 	RequestCount int
 	LastUpdated  time.Time
+	// last 5 minutes time buckets
+	RPMBuckets     [5]int
+	LatencyBuckets [5]time.Duration
+	CurrentIndex   int
+	LastBucket     time.Time
 }
 
 type MetricsWorker struct {
@@ -59,16 +63,63 @@ func (mw *MetricsWorker) processMetrics() {
 		if _, exists := mw.serviceMetrics[data.ServiceName][data.PodURL]; !exists {
 			mw.serviceMetrics[data.ServiceName][data.PodURL] = &ProxyPodMetrics{
 				LastUpdated: time.Now(),
+				LastBucket:  time.Now(),
 			}
 		}
 
 		metrics := mw.serviceMetrics[data.ServiceName][data.PodURL]
-		metrics.TotalLatency += data.Latency
 		metrics.RequestCount++
 		metrics.LastUpdated = time.Now()
 
+		now := time.Now()
+		elapsedMinutes := int(now.Sub(metrics.LastBucket).Minutes())
+
+		// shift
+		if elapsedMinutes > 0 {
+			for i := 0; i < elapsedMinutes && i < 5; i++ {
+				metrics.CurrentIndex = (metrics.CurrentIndex + 1) % 5
+				metrics.RPMBuckets[metrics.CurrentIndex] = 0
+				metrics.LatencyBuckets[metrics.CurrentIndex] = 0
+			}
+			metrics.LastBucket = now
+		}
+		metrics.RPMBuckets[metrics.CurrentIndex]++
+		metrics.LatencyBuckets[metrics.CurrentIndex] += data.Latency
+
 		mw.metricsMutex.Unlock()
 	}
+}
+
+func (mw *MetricsWorker) calculateAverageRPM(metrics *ProxyPodMetrics) float64 {
+	mw.metricsMutex.Lock()
+	defer mw.metricsMutex.Unlock()
+
+	totalRequests := 0
+
+	for _, count := range metrics.RPMBuckets {
+		totalRequests += count
+	}
+
+	return float64(totalRequests) / 5.0
+}
+
+func (mw *MetricsWorker) calculateAverageLatency(metrics *ProxyPodMetrics) time.Duration {
+	mw.metricsMutex.Lock()
+	defer mw.metricsMutex.Unlock()
+
+	totalLatency := time.Duration(0)
+	totalRequests := 0
+
+	for i := 0; i < len(metrics.RPMBuckets); i++ {
+		totalLatency += metrics.LatencyBuckets[i]
+		totalRequests += metrics.RPMBuckets[i]
+	}
+
+	if totalRequests == 0 {
+		return 0
+	}
+
+	return totalLatency / time.Duration(totalRequests)
 }
 
 func (mw *MetricsWorker) periodicFlush() {
@@ -89,17 +140,9 @@ func (mw *MetricsWorker) flushMetrics() {
 
 	for serviceName, podMetrics := range mw.serviceMetrics {
 		for podURL, metrics := range podMetrics {
-			avgLatency := time.Duration(0)
-			if metrics.RequestCount > 0 {
-				avgLatency = metrics.TotalLatency / time.Duration(metrics.RequestCount)
-			}
+			avgLatency := mw.calculateAverageLatency(metrics)
+			avgRPM := mw.calculateAverageRPM(metrics)
 
-			elapsedMinutes := now.Sub(metrics.LastUpdated).Minutes()
-			if elapsedMinutes == 0 {
-				elapsedMinutes = 1
-			}
-
-			avgRPM := float64(metrics.RequestCount) / elapsedMinutes
 			log.Printf("Flushing metrics for service: %s, pod: %s, avg latency: %v, avg RPM: %.2f",
 				serviceName, podURL, avgLatency, avgRPM)
 
@@ -109,9 +152,6 @@ func (mw *MetricsWorker) flushMetrics() {
 			} else {
 				log.Printf("Successfully saved metrics for service: %s, pod: %s", serviceName, podURL)
 			}
-
-			metrics.TotalLatency = 0
-			metrics.RequestCount = 0
 
 			if now.Sub(metrics.LastUpdated) > staleThreshold {
 				log.Printf("Removing stale metrics for service: %s, pod: %s", serviceName, podURL)
