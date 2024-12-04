@@ -35,7 +35,7 @@ type MetricsWorker struct {
 }
 
 func (mw *MetricsWorker) Start() {
-	log.Println("Starting latency worker...")
+	log.Println("Starting metrics worker...")
 	go mw.processMetrics()
 	go mw.periodicFlush()
 }
@@ -114,7 +114,6 @@ func (mw *MetricsWorker) calculateAverageLatency(metrics *ProxyPodMetrics) time.
 }
 
 func (mw *MetricsWorker) periodicFlush() {
-	log.Printf("periodic flush")
 	ticker := time.NewTicker(mw.flushInterval)
 	defer ticker.Stop()
 
@@ -124,10 +123,8 @@ func (mw *MetricsWorker) periodicFlush() {
 }
 
 func (mw *MetricsWorker) flushMetrics() {
-	log.Printf("flushin")
 	mw.metricsMutex.Lock()
 	defer func() {
-		log.Println("Releasing lock in flushMetrics...")
 		mw.metricsMutex.Unlock()
 	}()
 
@@ -135,9 +132,7 @@ func (mw *MetricsWorker) flushMetrics() {
 	staleThreshold := 15 * time.Minute
 
 	for serviceName, podMetrics := range mw.serviceMetrics {
-		log.Printf("loop1")
 		for podURL, metrics := range podMetrics {
-			log.Printf("loop2")
 			avgLatency := mw.calculateAverageLatency(metrics)
 			avgRPM := mw.calculateAverageRPM(metrics)
 
