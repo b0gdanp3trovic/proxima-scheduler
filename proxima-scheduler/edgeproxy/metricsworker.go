@@ -144,6 +144,9 @@ func (mw *MetricsWorker) flushMetrics() {
 			avgLatency := mw.calculateAverageLatency(metrics)
 			avgRPM := mw.calculateAverageRPM(metrics)
 
+			log.Printf("avglatency: %v", avgLatency)
+			log.Printf("avgrpm: %v", avgRPM)
+
 			log.Printf("Flushing metrics for service: %s, pod: %s, avg latency: %v, avg RPM: %.2f",
 				serviceName, podURL, avgLatency, avgRPM)
 
