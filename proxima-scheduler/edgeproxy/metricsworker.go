@@ -123,21 +123,23 @@ func (mw *MetricsWorker) periodicFlush() {
 }
 
 func (mw *MetricsWorker) flushMetrics() {
+	log.Printf("flushin")
 	mw.metricsMutex.Lock()
-	defer func() {
-		mw.metricsMutex.Unlock()
-	}()
+	defer mw.metricsMutex.Unlock()
 
 	now := time.Now()
 	staleThreshold := 15 * time.Minute
 
 	for serviceName, podMetrics := range mw.serviceMetrics {
+		log.Printf("loop1")
 		for podURL, metrics := range podMetrics {
+			log.Printf("loop2")
+
 			avgLatency := mw.calculateAverageLatency(metrics)
 			avgRPM := mw.calculateAverageRPM(metrics)
 
 			log.Printf("avglatency: %v", avgLatency)
-			log.Printf("avgrpm: %v", avgRPM)
+			log.Printf("avgrpm: %.2f", avgRPM)
 
 			log.Printf("Flushing metrics for service: %s, pod: %s, avg latency: %v, avg RPM: %.2f",
 				serviceName, podURL, avgLatency, avgRPM)
@@ -148,6 +150,10 @@ func (mw *MetricsWorker) flushMetrics() {
 			} else {
 				log.Printf("Successfully saved metrics for service: %s, pod: %s", serviceName, podURL)
 			}
+
+			metrics.CurrentIndex = (metrics.CurrentIndex + 1) % len(metrics.RPMBuckets)
+			metrics.RPMBuckets[metrics.CurrentIndex] = 0
+			metrics.LatencyBuckets[metrics.CurrentIndex] = 0
 
 			if now.Sub(metrics.LastUpdated) > staleThreshold {
 				log.Printf("Removing stale metrics for service: %s, pod: %s", serviceName, podURL)

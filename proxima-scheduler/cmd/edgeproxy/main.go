@@ -28,7 +28,7 @@ func main() {
 		log.Fatalf("Failed to initialize influx db: %v", err)
 	}
 
-	latencyWorker := edgeproxy.NewMetricsWorker(100, influxDb, cfg.NodeIP, 10*time.Second)
+	latencyWorker := edgeproxy.NewMetricsWorker(100, influxDb, cfg.NodeIP, 1*time.Minute)
 	latencyWorker.Start()
 
 	// TODO - change
