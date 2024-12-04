@@ -9,17 +9,15 @@ import (
 )
 
 type MetricsData struct {
-	ServiceName  string
-	PodURL       string
-	NodeIP       string
-	Latency      time.Duration
-	Timestamp    time.Time
-	RequestCount int
+	ServiceName string
+	PodURL      string
+	NodeIP      string
+	Latency     time.Duration
+	Timestamp   time.Time
 }
 
 type ProxyPodMetrics struct {
-	RequestCount int
-	LastUpdated  time.Time
+	LastUpdated time.Time
 	// last 5 minutes time buckets
 	RPMBuckets     [5]int
 	LatencyBuckets [5]time.Duration
@@ -68,7 +66,6 @@ func (mw *MetricsWorker) processMetrics() {
 		}
 
 		metrics := mw.serviceMetrics[data.ServiceName][data.PodURL]
-		metrics.RequestCount++
 		metrics.LastUpdated = time.Now()
 
 		now := time.Now()
