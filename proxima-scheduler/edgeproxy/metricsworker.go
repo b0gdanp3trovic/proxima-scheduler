@@ -120,6 +120,7 @@ func (mw *MetricsWorker) calculateAverageLatency(metrics *ProxyPodMetrics) time.
 }
 
 func (mw *MetricsWorker) periodicFlush() {
+	log.Printf("periodic flush")
 	ticker := time.NewTicker(mw.flushInterval)
 	defer ticker.Stop()
 
@@ -129,6 +130,7 @@ func (mw *MetricsWorker) periodicFlush() {
 }
 
 func (mw *MetricsWorker) flushMetrics() {
+	log.Printf("flushin")
 	mw.metricsMutex.Lock()
 	defer mw.metricsMutex.Unlock()
 
