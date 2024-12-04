@@ -132,7 +132,10 @@ func (mw *MetricsWorker) periodicFlush() {
 func (mw *MetricsWorker) flushMetrics() {
 	log.Printf("flushin")
 	mw.metricsMutex.Lock()
-	defer mw.metricsMutex.Unlock()
+	defer func() {
+		log.Println("Releasing lock in flushMetrics...")
+		mw.metricsMutex.Unlock()
+	}()
 
 	now := time.Now()
 	staleThreshold := 15 * time.Minute
