@@ -63,7 +63,19 @@ func (p *Pinger) updateAddresses() {
 
 	currentNodes := make(map[string]struct{})
 	for _, node := range nodes.Items {
-		address := node.Status.Addresses[0].Address
+		var address string
+		// Get the Internal IP of the node
+		for _, addr := range node.Status.Addresses {
+			if addr.Type == "InternalIP" {
+				address = addr.Address
+				break
+			}
+		}
+
+		if address == "" {
+			fmt.Printf("No Internal IP found for node %s\n", node.Name)
+			continue
+		}
 
 		/*
 		   The node hosting the pinger is designated as an "edge" node.
@@ -101,7 +113,7 @@ func (p *Pinger) PingAll() {
 	p.mu.Unlock()
 
 	for _, address := range addresses {
-		// Bing pinger instance
+		// Create a new pinger instance
 		pinger, err := bing.NewPinger(address)
 
 		// Windows support
@@ -109,9 +121,6 @@ func (p *Pinger) PingAll() {
 
 		if err != nil {
 			fmt.Printf("Failed to create pinger for %s: %v\n", address, err)
-			p.mu.Lock()
-			p.Latencies[address] = -1
-			p.mu.Unlock()
 			continue
 		}
 
@@ -121,9 +130,6 @@ func (p *Pinger) PingAll() {
 		err = pinger.Run()
 		if err != nil {
 			fmt.Printf("Failed to ping %s: %v\n", address, err)
-			p.mu.Lock()
-			p.Latencies[address] = -1
-			p.mu.Unlock()
 			continue
 		}
 
@@ -134,17 +140,16 @@ func (p *Pinger) PingAll() {
 			p.Latencies[address] = stats.AvgRtt
 			fmt.Printf("Ping to %s: %v\n", address, stats.AvgRtt)
 		} else {
-			p.Latencies[address] = -1
 			fmt.Printf("Ping to %s failed: No packets received\n", address)
 		}
 		p.mu.Unlock()
 	}
 
+	// Save to DB if enabled
 	if p.DBEnabled {
 		p.SaveLatenciesToDB()
 	}
 }
-
 func (p *Pinger) SaveLatenciesToDB() {
 	if !p.DBEnabled {
 		log.Println("Database disabled, skipping database save.")
