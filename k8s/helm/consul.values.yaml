@@ -16,14 +16,11 @@ global:
 
   acls:
     manageSystemACLs: false
-    # If ACLs are enabled, we must create a token for secondary
-    # datacenters to replicate ACLs.
-    createReplicationToken: false
 
   # Gossip encryption secures the protocol Consul uses to quickly
   # discover new nodes and detect failure.
-  # gossipEncryption:
-  #   autoGenerate: true
+  gossipEncryption:
+    autoGenerate: true
 
 connectInject:
   # Consul Connect service mesh must be enabled for federation.
@@ -33,4 +30,6 @@ meshGateway:
   # Mesh gateways are gateways between datacenters. They must be enabled
   # for federation in Kubernetes since the communication between datacenters
   # goes through the mesh gateways.
+  enabled: true
+ui:
   enabled: true
