@@ -1,4 +1,4 @@
-package main
+package noderegister
 
 import (
 	"bytes"
@@ -29,58 +29,56 @@ type NodeRegister struct {
 	clusterName string
 }
 
-func NewNodeRegister(interval time.Duration, clientset *kubernetes.Clientset) *NodeRegister {
+func NewNodeRegister(interval time.Duration, clientset *kubernetes.Clientset, consulURL string, clusterName string) *NodeRegister {
 	return &NodeRegister{
-		interval:  interval,
-		clientset: clientset,
+		interval:    interval,
+		clientset:   clientset,
+		consulURL:   consulURL,
+		clusterName: clusterName,
 	}
 }
 
-func (nr *NodeRegister) Start() {
-	for {
-		nodes, err := util.DiscoverNodes(nr.clientset)
-		if err != nil {
-			log.Printf("Failed to list nodes: %v", err)
-			time.Sleep(10 * time.Second)
+func (nr *NodeRegister) registerNodesToConsul() error {
+	nodes, err := util.DiscoverNodes(nr.clientset)
+	if err != nil {
+		return fmt.Errorf("failed to list nodes: %v", err)
+	}
+
+	for _, node := range nodes.Items {
+		var nodeIP string
+		for _, addr := range node.Status.Addresses {
+			if addr.Type == v1.NodeInternalIP {
+				nodeIP = addr.Address
+				break
+			}
+		}
+
+		if nodeIP == "" {
+			log.Printf("No Internal IP found for node: %s", node.Name)
 			continue
 		}
 
-		for _, node := range nodes.Items {
-			var nodeIP string
-			for _, addr := range node.Status.Addresses {
-				if addr.Type == v1.NodeInternalIP {
-					nodeIP = addr.Address
-					break
-				}
-			}
-
-			if nodeIP == "" {
-				log.Printf("No Internal IP found for node: %s", node.Name)
-				continue
-			}
-
-			service := ConsulService{
-				ID:         fmt.Sprintf("node-%s", node.Name),
-				Name:       "k8s-node",
-				Address:    nodeIP,
-				Tags:       []string{"kubernetes-node", fmt.Sprintf("cluster:%s", nr.clusterName)},
-				Meta:       map[string]string{"nodeName": node.Name},
-				Datacenter: nr.clusterName,
-			}
-
-			err := nr.registerNodeWithConsul(service)
-			if err != nil {
-				log.Printf("Failed to register node %s with Consul: %v", node.Name, err)
-			} else {
-				log.Printf("Registered node %s (%s) with Consul", node.Name, nodeIP)
-			}
+		service := ConsulService{
+			ID:         fmt.Sprintf("node-%s", node.Name),
+			Name:       "k8s-node",
+			Address:    nodeIP,
+			Tags:       []string{"kubernetes-node", fmt.Sprintf("cluster:%s", nr.clusterName)},
+			Meta:       map[string]string{"nodeName": node.Name},
+			Datacenter: nr.clusterName,
 		}
 
-		time.Sleep(30 * time.Second)
+		err := nr.sendRegistrationRequest(service)
+		if err != nil {
+			log.Printf("Failed to register node %s with Consul: %v", node.Name, err)
+		} else {
+			log.Printf("Registered node %s (%s) with Consul", node.Name, nodeIP)
+		}
 	}
+
+	return nil
 }
 
-func (nr *NodeRegister) registerNodeWithConsul(service ConsulService) error {
+func (nr *NodeRegister) sendRegistrationRequest(service ConsulService) error {
 	data, err := json.Marshal(service)
 	if err != nil {
 		return fmt.Errorf("failed to marshal service: %v", err)
@@ -97,4 +95,18 @@ func (nr *NodeRegister) registerNodeWithConsul(service ConsulService) error {
 	}
 
 	return nil
+}
+
+func (nr *NodeRegister) Run() {
+	log.Printf("Starting node registrator...")
+
+	go func() {
+		ticker := time.NewTicker(nr.interval)
+		defer ticker.Stop()
+
+		for range ticker.C {
+			log.Println("Registering nodes...")
+			nr.registerNodesToConsul()
+		}
+	}()
 }

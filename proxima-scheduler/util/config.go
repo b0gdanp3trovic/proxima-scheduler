@@ -20,6 +20,7 @@ type Config struct {
 	ConsulURL          string
 	AdmissionCrtPath   string
 	AdmissionKeyPath   string
+	ClusterName        string
 }
 
 func LoadConfig() *Config {
@@ -34,6 +35,7 @@ func LoadConfig() *Config {
 	consulURL := getEnv("CONSUL_URL", "")
 	admissionCrtPath := getEnv("ADMISSION_CRT_PATH", "")
 	admissionKeyPath := getEnv("ADMISSION_KEY_PATH", "")
+	clusterName := getEnv("CLUSTER_NAME", "")
 
 	return &Config{
 		InfluxDBAddress:    influxDBAddress,
@@ -47,6 +49,7 @@ func LoadConfig() *Config {
 		ConsulURL:          consulURL,
 		AdmissionCrtPath:   admissionCrtPath,
 		AdmissionKeyPath:   admissionKeyPath,
+		ClusterName:        clusterName,
 	}
 }
 
