@@ -22,4 +22,7 @@ func main() {
 
 	noderegister := noderegister.NewNodeRegister(10*time.Second, clientset, cfg.ConsulURL, cfg.ClusterName)
 	noderegister.Run()
+
+	// Block the function from exiting
+	select {}
 }
