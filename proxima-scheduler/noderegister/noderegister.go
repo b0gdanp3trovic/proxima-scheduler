@@ -79,12 +79,14 @@ func (nr *NodeRegister) registerNodesToConsul() error {
 }
 
 func (nr *NodeRegister) sendRegistrationRequest(service ConsulService) error {
+	url := fmt.Sprintf("%s/v1/agent/service/register", nr.consulURL)
+
 	data, err := json.Marshal(service)
 	if err != nil {
 		return fmt.Errorf("failed to marshal service: %v", err)
 	}
 
-	resp, err := http.Post(nr.consulURL, "application/json", bytes.NewBuffer(data))
+	resp, err := http.Post(url, "application/json", bytes.NewBuffer(data))
 	if err != nil {
 		return fmt.Errorf("failed to send registration request: %v", err)
 	}
