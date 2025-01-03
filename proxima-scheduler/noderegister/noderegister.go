@@ -92,8 +92,14 @@ func (nr *NodeRegister) sendRegistrationRequest(service ConsulService) error {
 	}
 	defer resp.Body.Close()
 
+	responseBody := new(bytes.Buffer)
+	if err != nil {
+		return fmt.Errorf("failed to read response body: %v", err)
+	}
+
+	_, err = responseBody.ReadFrom(resp.Body)
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("unexpected response code: %d", resp.StatusCode)
+		return fmt.Errorf("unexpected response code: %d, response body: %s", resp.StatusCode, responseBody.String())
 	}
 
 	return nil
