@@ -20,7 +20,12 @@ func main() {
 		os.Exit(1)
 	}
 
-	noderegister := noderegister.NewNodeRegister(10*time.Second, clientset, cfg.ConsulURL, cfg.ClusterName)
+	noderegister, err := noderegister.NewNodeRegister(10*time.Second, clientset, cfg.ConsulURL, cfg.ClusterName, cfg.ConsulCertPath)
+
+	if err != nil {
+		log.Fatalf("Failed to create node registrator: %v", err)
+		os.Exit(1)
+	}
 	noderegister.Run()
 
 	// Block the function from exiting

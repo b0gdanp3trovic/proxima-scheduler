@@ -27,15 +27,22 @@ type NodeRegister struct {
 	clientset   *kubernetes.Clientset
 	consulURL   string
 	clusterName string
+	httpClient  *http.Client
 }
 
-func NewNodeRegister(interval time.Duration, clientset *kubernetes.Clientset, consulURL string, clusterName string) *NodeRegister {
+func NewNodeRegister(interval time.Duration, clientset *kubernetes.Clientset, consulURL string, clusterName string, caCertPath string) (*NodeRegister, error) {
+	httpClient, err := util.NewHTTPCLient(caCertPath)
+	if err != nil {
+		return nil, fmt.Errorf("Failed reading caCertPath: %v", err)
+	}
+
 	return &NodeRegister{
 		interval:    interval,
 		clientset:   clientset,
 		consulURL:   consulURL,
 		clusterName: clusterName,
-	}
+		httpClient:  httpClient,
+	}, nil
 }
 
 func (nr *NodeRegister) registerNodesToConsul() error {
@@ -86,7 +93,7 @@ func (nr *NodeRegister) sendRegistrationRequest(service ConsulService) error {
 		return fmt.Errorf("failed to marshal service: %v", err)
 	}
 
-	resp, err := http.Post(url, "application/json", bytes.NewBuffer(data))
+	resp, err := nr.httpClient.Post(url, "application/json", bytes.NewBuffer(data))
 	if err != nil {
 		return fmt.Errorf("failed to send registration request: %v", err)
 	}
