@@ -66,12 +66,11 @@ func (nr *NodeRegister) registerNodesToConsul() error {
 		}
 
 		service := ConsulService{
-			ID:         fmt.Sprintf("node-%s", node.Name),
-			Name:       "k8s-node",
-			Address:    nodeIP,
-			Tags:       []string{"kubernetes-node", fmt.Sprintf("cluster:%s", nr.clusterName)},
-			Meta:       map[string]string{"nodeName": node.Name},
-			Datacenter: nr.clusterName,
+			ID:      fmt.Sprintf("node-%s", node.Name),
+			Name:    "k8s-node",
+			Address: nodeIP,
+			Tags:    []string{"kubernetes-node", fmt.Sprintf("cluster:%s", nr.clusterName)},
+			Meta:    map[string]string{"nodeName": node.Name},
 		}
 
 		err := nr.sendRegistrationRequest(service)
