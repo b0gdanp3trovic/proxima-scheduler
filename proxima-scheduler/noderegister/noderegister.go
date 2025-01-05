@@ -14,12 +14,11 @@ import (
 )
 
 type ConsulService struct {
-	ID         string            `json:"ID"`
-	Name       string            `json:"Name"`
-	Address    string            `json:"Address"`
-	Tags       []string          `json:"Tags"`
-	Meta       map[string]string `json:"Meta"`
-	Datacenter string            `json:"Datacenter"`
+	ID      string            `json:"ID"`
+	Name    string            `json:"Name"`
+	Address string            `json:"Address"`
+	Tags    []string          `json:"Tags"`
+	Meta    map[string]string `json:"Meta"`
 }
 
 type NodeRegister struct {
