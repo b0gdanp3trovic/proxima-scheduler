@@ -93,22 +93,29 @@ func (nr *NodeRegister) sendRegistrationRequest(service ConsulService) error {
 		return fmt.Errorf("failed to marshal service: %v", err)
 	}
 
-	resp, err := nr.httpClient.Post(url, "application/json", bytes.NewBuffer(data))
+	req, err := http.NewRequest(http.MethodPut, url, bytes.NewBuffer(data))
+	if err != nil {
+		return fmt.Errorf("failed to create HTTP request: %v", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := nr.httpClient.Do(req)
 	if err != nil {
 		return fmt.Errorf("failed to send registration request: %v", err)
 	}
 	defer resp.Body.Close()
 
 	responseBody := new(bytes.Buffer)
+	_, err = responseBody.ReadFrom(resp.Body)
 	if err != nil {
 		return fmt.Errorf("failed to read response body: %v", err)
 	}
 
-	_, err = responseBody.ReadFrom(resp.Body)
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("unexpected response code: %d, response body: %s", resp.StatusCode, responseBody.String())
 	}
 
+	log.Printf("Successfully registered service with ID: %s", service.ID)
 	return nil
 }
 
