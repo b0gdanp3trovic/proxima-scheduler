@@ -34,3 +34,13 @@ jobs:
           bogdanb0gdan/proxima-scheduler:latest
           bogdanb0gdan/proxima-scheduler:${{ github.sha }}
 
+    - name: Build and Push Pinger Service image
+      uses: docker/build-push-action@v4
+      with:
+        context: ./ping-service
+        file: ./ping-service/Dockerfile
+        push: true
+        tags: |
+          bogdanb0gdan/ping-service:latest
+          bogdanb0gdan/ping-service:${{ github.sha }}
+
