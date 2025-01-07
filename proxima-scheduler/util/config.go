@@ -10,6 +10,7 @@ import (
 
 type Config struct {
 	InfluxDBAddress    string
+	InfluxDBToken      string
 	DbName             string
 	DatabaseEnabled    bool
 	PingInterval       time.Duration
@@ -38,9 +39,11 @@ func LoadConfig() *Config {
 	admissionKeyPath := getEnv("ADMISSION_KEY_PATH", "")
 	clusterName := getEnv("CLUSTER_NAME", "")
 	consulCertPath := getEnv("CONSUL_CERT_PATH", "")
+	influxDBToken := getEnv("INFLUX_DB_TOKEN", "")
 
 	return &Config{
 		InfluxDBAddress:    influxDBAddress,
+		InfluxDBToken:      influxDBToken,
 		DbName:             dbName,
 		DatabaseEnabled:    databaseEnabled,
 		PingInterval:       pingInterval,
