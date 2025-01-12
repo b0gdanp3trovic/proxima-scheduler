@@ -64,11 +64,10 @@ func (db *InfluxDB) SavePingTime(latencies map[string]time.Duration, edgeProxyAd
 	}
 
 	db.WriteAPI.Flush()
-	select {
-	case err := <-db.WriteAPI.Errors():
-		return fmt.Errorf("failed to write to InfluxDB: %v", err)
-	default:
+	if err := db.handleWriteAPIErrors(); err != nil {
+		return err
 	}
+
 	return nil
 }
 
@@ -87,9 +86,10 @@ func (db *InfluxDB) SaveRequestLatency(podURL, nodeIP, edgeproxyNodeIP string, l
 	)
 
 	db.WriteAPI.WritePoint(point)
-	if err := db.WriteAPI.Errors(); err != nil {
-		return fmt.Errorf("failed to write to InfluxDB: %v", err)
+	if err := db.handleWriteAPIErrors(); err != nil {
+		return err
 	}
+
 	return nil
 }
 
@@ -272,8 +272,8 @@ func (db *InfluxDB) SaveNodeScores(scores map[string]float64) error {
 	}
 
 	db.WriteAPI.Flush()
-	if err := db.WriteAPI.Errors(); err != nil {
-		return fmt.Errorf("failed to write to InfluxDB: %v", err)
+	if err := db.handleWriteAPIErrors(); err != nil {
+		return err
 	}
 
 	return nil
@@ -295,9 +295,18 @@ func (db *InfluxDB) SaveEdgeProxyMetricsForService(serviceName string, podURL st
 	)
 
 	db.WriteAPI.WritePoint(point)
-	if err := db.WriteAPI.Errors(); err != nil {
-		return fmt.Errorf("failed to write to InfluxDB: %v", err)
+	if err := db.handleWriteAPIErrors(); err != nil {
+		return err
 	}
 
 	return nil
+}
+
+func (db *InfluxDB) handleWriteAPIErrors() error {
+	select {
+	case err := <-db.WriteAPI.Errors():
+		return fmt.Errorf("failed to write to InfluxDB: %v", err)
+	default:
+		return nil
+	}
 }
