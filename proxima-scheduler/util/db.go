@@ -1,15 +1,15 @@
 package util
 
 import (
-	"encoding/json"
+	"context"
 	"fmt"
 	"log"
-	"strconv"
-	"strings"
 	"sync"
 	"time"
 
-	client "github.com/influxdata/influxdb1-client/v2"
+	"github.com/influxdata/influxdb-client-go/v2/api"
+
+	influxdb2 "github.com/influxdata/influxdb-client-go/v2"
 )
 
 type Database interface {
@@ -21,228 +21,195 @@ type Database interface {
 	GetNodeScores() (NodeScores, error)
 	SaveRequestLatency(podURL string, nodeIP string, edgeproxyNodeIP string, latency time.Duration) error
 	SaveNodeScores(scores map[string]float64) error
-	createDbIfNotExists() error
 }
 
 type InfluxDB struct {
-	DatabaseName string
-	Client       client.Client
-	initOnce     sync.Once
+	Bucket   string
+	Org      string
+	Client   influxdb2.Client
+	WriteAPI api.WriteAPI
+	QueryAPI api.QueryAPI
+	initOnce sync.Once
 }
 
 type NodeLatencies map[string]float64
-
 type EdgeProxyToNodeLatencies map[string]map[string]float64
-
 type NodeScores map[string]float64
 
-func NewInfluxDB(client client.Client, databaseName string) (*InfluxDB, error) {
-	db := &InfluxDB{
-		DatabaseName: databaseName,
-		Client:       client,
+func NewInfluxDB(client influxdb2.Client, org, bucket string) *InfluxDB {
+	return &InfluxDB{
+		Bucket:   bucket,
+		Org:      org,
+		Client:   client,
+		WriteAPI: client.WriteAPI(org, bucket),
+		QueryAPI: client.QueryAPI(org),
 	}
-
-	if err := db.createDbIfNotExists(); err != nil {
-		return nil, err
-	}
-
-	return db, nil
-}
-
-func (db *InfluxDB) createDbIfNotExists() error {
-	var err error
-	db.initOnce.Do(func() {
-		q := client.NewQuery(fmt.Sprintf("CREATE DATABASE %s", db.DatabaseName), "", "")
-		log.Printf("Executing database creation query: %s", q.Command)
-		response, queryErr := db.Client.Query(q)
-		if queryErr != nil {
-			err = fmt.Errorf("failed to execute database creation query: %w", queryErr)
-			log.Printf("Query execution error: %v", queryErr)
-			return
-		}
-		if response.Error() != nil {
-			err = fmt.Errorf("failed to create database %s: %w", db.DatabaseName, response.Error())
-			log.Printf("Query response error: %v", response.Error())
-		}
-		log.Printf("Database creation query completed successfully.")
-	})
-	return err
 }
 
 func (db *InfluxDB) SavePingTime(latencies map[string]time.Duration, edgeProxyAddress string) error {
-	bp, err := client.NewBatchPoints(client.BatchPointsConfig{
-		Database:  db.DatabaseName,
-		Precision: "s",
-	})
-
-	if err != nil {
-		return err
-	}
-
 	for address, latency := range latencies {
-		tags := map[string]string{
-			"node":       address,
-			"edge_proxy": edgeProxyAddress,
-		}
+		point := influxdb2.NewPoint(
+			"ping_times",
+			map[string]string{
+				"node":       address,
+				"edge_proxy": edgeProxyAddress,
+			},
+			map[string]interface{}{
+				"latency_ms": latency.Seconds() * 1000,
+			},
+			time.Now(),
+		)
 
-		fields := map[string]interface{}{
-			"latency_ms": latency.Seconds() * 1000,
-		}
-
-		pt, err := client.NewPoint("ping_times", tags, fields, time.Now())
-		if err != nil {
-			return err
-		}
-
-		bp.AddPoint(pt)
+		db.WriteAPI.WritePoint(point)
 	}
 
-	return db.Client.Write(bp)
+	db.WriteAPI.Flush()
+
+	if err := db.WriteAPI.Errors(); err != nil {
+		return fmt.Errorf("failed to write to InfluxDB: %v", err)
+	}
+
+	return nil
 }
 
-func (db *InfluxDB) SaveRequestLatency(podURL string, nodeIP string, edgeproxyNodeIP string, latency time.Duration) error {
-	bp, err := client.NewBatchPoints(client.BatchPointsConfig{
-		Database:  db.DatabaseName,
-		Precision: "s",
-	})
+func (db *InfluxDB) SaveRequestLatency(podURL, nodeIP, edgeproxyNodeIP string, latency time.Duration) error {
+	point := influxdb2.NewPoint(
+		"request_latency",
+		map[string]string{
+			"node":      nodeIP,
+			"pod":       podURL,
+			"edge_node": edgeproxyNodeIP,
+		},
+		map[string]interface{}{
+			"latency_ms": latency.Seconds() * 1000,
+		},
+		time.Now(),
+	)
 
-	if err != nil {
-		return err
-	}
-
-	tags := map[string]string{
-		"node":      nodeIP,
-		"pod":       podURL,
-		"edge_node": edgeproxyNodeIP,
-	}
-
-	fields := map[string]interface{}{
-		"latency_ms": latency.Seconds() * 1000,
-	}
-
-	pt, err := client.NewPoint("request_latency", tags, fields, time.Now())
-	if err != nil {
-		return err
-	}
-
-	bp.AddPoint(pt)
-
-	return db.Client.Write(bp)
+	db.WriteAPI.WritePoint(point)
+	return nil
 }
 
 func (db *InfluxDB) GetAveragePingTime() (NodeLatencies, error) {
 	query := fmt.Sprintf(`
-		SELECT MEAN("latency_ms")
-		FROM %s.autogen.ping_times
-		WHERE time > now() - 30s
-		GROUP BY "node"
-	`, db.DatabaseName)
+		from(bucket: "%s")
+		|> range(start: -30s)
+		|> filter(fn: (r) => r._measurement == "ping_times")
+		|> group(columns: ["node"])
+		|> mean(column: "latency_ms")
+	`, db.Bucket)
 
-	q := client.NewQuery(query, db.DatabaseName, "s")
-	response, err := db.Client.Query(q)
+	result, err := db.QueryAPI.Query(context.Background(), query)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to query average ping times: %w", err)
 	}
 
-	if response.Error() != nil {
-		return nil, response.Error()
-	}
-
-	result := make(map[string]float64)
-	for _, row := range response.Results[0].Series {
-		node := strings.TrimSpace(strings.ToLower(row.Tags["node"]))
-
-		if len(row.Values) > 0 {
-			latency, err := parseLatency(row.Values[0][1], node)
-			if err != nil {
-				fmt.Printf("Error parsing latency for node %s: %v\n", node, err)
-				continue
-			}
-			result[node] = latency
+	latencies := make(NodeLatencies)
+	for result.Next() {
+		node, ok := result.Record().ValueByKey("node").(string)
+		if !ok {
+			log.Printf("Failed to parse node tag in record: %+v", result.Record())
+			continue
 		}
+
+		latency, ok := result.Record().Value().(float64)
+		if !ok {
+			log.Printf("Failed to parse latency for node %s in record: %+v", node, result.Record())
+			continue
+		}
+
+		latencies[node] = latency
 	}
 
-	return result, nil
+	if result.Err() != nil {
+		return nil, fmt.Errorf("query result error: %w", result.Err())
+	}
+
+	return latencies, nil
 }
 
 func (db *InfluxDB) GetAveragePingTimeByEdges() (EdgeProxyToNodeLatencies, error) {
 	query := fmt.Sprintf(`
-		SELECT MEAN("latency_ms")
-		FROM %s.autogen.ping_times
-		WHERE time > now() - 60s
-		GROUP BY "node", "edge_proxy"
-	`, db.DatabaseName)
+		from(bucket: "%s")
+		|> range(start: -60s)
+		|> filter(fn: (r) => r._measurement == "ping_times")
+		|> group(columns: ["node", "edge_proxy"])
+		|> mean(column: "latency_ms")
+	`, db.Bucket)
 
-	q := client.NewQuery(query, db.DatabaseName, "s")
-	response, err := db.Client.Query(q)
+	result, err := db.QueryAPI.Query(context.Background(), query)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to query average ping times by edges: %w", err)
 	}
 
-	if response.Error() != nil {
-		return nil, response.Error()
-	}
-
-	result := make(EdgeProxyToNodeLatencies)
-
-	for _, row := range response.Results[0].Series {
-		node := strings.TrimSpace(strings.ToLower(row.Tags["node"]))
-		edgeProxy := strings.TrimSpace(strings.ToLower(row.Tags["edge_proxy"]))
-
-		if result[edgeProxy] == nil {
-			result[edgeProxy] = make(map[string]float64)
+	latencies := make(EdgeProxyToNodeLatencies)
+	for result.Next() {
+		node, ok := result.Record().ValueByKey("node").(string)
+		if !ok {
+			log.Printf("Failed to parse node tag in record: %+v", result.Record())
+			continue
 		}
 
-		if len(row.Values) > 0 {
-			latency, err := parseLatency(row.Values[0][1], node)
-			if err != nil {
-				fmt.Printf("Error parsing latency for node %s and edge proxy %s: %v\n", node, edgeProxy, err)
-				continue
-			}
-
-			result[edgeProxy][node] = latency
+		edgeProxy, ok := result.Record().ValueByKey("edge_proxy").(string)
+		if !ok {
+			log.Printf("Failed to parse edge_proxy tag in record: %+v", result.Record())
+			continue
 		}
+
+		latency, ok := result.Record().Value().(float64)
+		if !ok {
+			log.Printf("Failed to parse latency for node %s and edge proxy %s in record: %+v", node, edgeProxy, result.Record())
+			continue
+		}
+
+		if latencies[edgeProxy] == nil {
+			latencies[edgeProxy] = make(map[string]float64)
+		}
+
+		latencies[edgeProxy][node] = latency
 	}
 
-	return result, nil
+	if result.Err() != nil {
+		return nil, fmt.Errorf("query result error: %w", result.Err())
+	}
+
+	return latencies, nil
 }
 
 func (db *InfluxDB) GetAverageLatenciesForEdge(edgeProxyAddress string) (NodeLatencies, error) {
 	query := fmt.Sprintf(`
-		SELECT MEAN("latency_ms")
-		FROM %s.autogen.ping_times
-		WHERE time > now() - 30s AND "edge_proxy" = '%s'
-		GROUP BY "node"
-	`, db.DatabaseName, edgeProxyAddress)
+		from(bucket: "%s")
+		|> range(start: -30s)
+		|> filter(fn: (r) => r._measurement == "ping_times")
+		|> filter(fn: (r) => r.edge_proxy == "%s")
+		|> group(columns: ["node"])
+		|> mean(column: "latency_ms")
+	`, db.Bucket, edgeProxyAddress)
 
-	q := client.NewQuery(query, db.DatabaseName, "s")
-	response, err := db.Client.Query(q)
+	result, err := db.QueryAPI.Query(context.Background(), query)
 	if err != nil {
-		return nil, fmt.Errorf("failed to query latencies for edge node %s: %w", edgeProxyAddress, err)
-	}
-
-	if response.Error() != nil {
-		return nil, fmt.Errorf("query response error for edge node %s: %w", edgeProxyAddress, response.Error())
+		return nil, fmt.Errorf("failed to query average latencies for edge: %w", err)
 	}
 
 	latencies := make(NodeLatencies)
-	for _, row := range response.Results[0].Series {
-		log.Printf("Processing series: %+v", row)
-		node := strings.TrimSpace(strings.ToLower(row.Tags["node"]))
-
-		for _, value := range row.Values {
-			//log.Printf("Row values for node %s: %v", node, value)
-			if len(value) > 1 {
-				latency, err := parseLatency(value[1], node)
-				if err != nil {
-					log.Printf("Error parsing latency for node %s: %v", node, err)
-					continue
-				}
-				latencies[node] = latency
-			} else {
-				log.Printf("Insufficient values for node %s", node)
-			}
+	for result.Next() {
+		node, ok := result.Record().ValueByKey("node").(string)
+		if !ok {
+			log.Printf("Failed to parse node tag in record: %+v", result.Record())
+			continue
 		}
+
+		latency, ok := result.Record().Value().(float64)
+		if !ok {
+			log.Printf("Failed to parse latency for node %s in record: %+v", node, result.Record())
+			continue
+		}
+
+		latencies[node] = latency
+	}
+
+	if result.Err() != nil {
+		return nil, fmt.Errorf("query result error for edge proxy %s: %w", edgeProxyAddress, result.Err())
 	}
 
 	return latencies, nil
@@ -250,129 +217,84 @@ func (db *InfluxDB) GetAverageLatenciesForEdge(edgeProxyAddress string) (NodeLat
 
 func (db *InfluxDB) GetNodeScores() (NodeScores, error) {
 	query := fmt.Sprintf(`
-		SELECT LAST("score")
-		FROM %s.autogen.node_scores
-		GROUP BY "node"
-	`, db.DatabaseName)
+		from(bucket: "%s")
+		|> range(start: -60m) // Adjust the time range as needed
+		|> filter(fn: (r) => r._measurement == "node_scores")
+		|> group(columns: ["node"])
+		|> last(column: "_value")
+	`, db.Bucket)
 
-	q := client.NewQuery(query, db.DatabaseName, "s")
-	response, err := db.Client.Query(q)
-
+	result, err := db.QueryAPI.Query(context.Background(), query)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query node scores: %w", err)
 	}
 
-	if response.Error() != nil {
-		return nil, fmt.Errorf("query response error: %w", response.Error())
+	scores := make(NodeScores)
+	for result.Next() {
+		node, ok := result.Record().ValueByKey("node").(string)
+		if !ok {
+			log.Printf("Failed to parse node tag in record: %+v", result.Record())
+			continue
+		}
+
+		score, ok := result.Record().Value().(float64)
+		if !ok {
+			log.Printf("Failed to parse score for node %s in record: %+v", node, result.Record())
+			continue
+		}
+
+		scores[node] = score
 	}
 
-	scores := make(NodeScores)
-	for _, row := range response.Results[0].Series {
-		node := strings.TrimSpace(strings.ToLower(row.Tags["node"]))
-
-		if len(row.Values) > 0 {
-			score, err := parseScore(row.Values[0][1], node)
-			if err != nil {
-				fmt.Printf("Error parsing score for node %s: %v\n", node, err)
-				continue
-			}
-			scores[node] = score
-		}
+	if result.Err() != nil {
+		return nil, fmt.Errorf("query result error: %w", result.Err())
 	}
 
 	return scores, nil
 }
 
 func (db *InfluxDB) SaveNodeScores(scores map[string]float64) error {
-	bp, err := client.NewBatchPoints(client.BatchPointsConfig{
-		Database:  db.DatabaseName,
-		Precision: "s",
-	})
-	if err != nil {
-		return fmt.Errorf("failed to create batch points: %w", err)
-	}
-
 	for nodeIP, score := range scores {
-		tags := map[string]string{
-			"node": nodeIP,
-		}
-		fields := map[string]interface{}{
-			"score": score,
-		}
-
-		pt, err := client.NewPoint("node_scores", tags, fields, time.Now())
-		if err != nil {
-			return fmt.Errorf("failed to create point for node %s: %w", nodeIP, err)
-		}
-		bp.AddPoint(pt)
+		point := influxdb2.NewPoint(
+			"node_scores",
+			map[string]string{
+				"node": nodeIP,
+			},
+			map[string]interface{}{
+				"score": score,
+			},
+			time.Now(),
+		)
+		db.WriteAPI.WritePoint(point)
 	}
 
-	if err := db.Client.Write(bp); err != nil {
-		return fmt.Errorf("failed to write batch points to InfluxDB: %w", err)
+	db.WriteAPI.Flush()
+	if err := db.WriteAPI.Errors(); err != nil {
+		return fmt.Errorf("failed to write to InfluxDB: %v", err)
 	}
 
 	return nil
 }
 
 func (db *InfluxDB) SaveEdgeProxyMetricsForService(serviceName string, podURL string, edgeProxyIP string, avgLatency time.Duration, avgRPM float64) error {
-	bp, err := client.NewBatchPoints(client.BatchPointsConfig{
-		Database:  db.DatabaseName,
-		Precision: "s",
-	})
+	point := influxdb2.NewPoint(
+		"edge_proxy_service_metrics",
+		map[string]string{
+			"service":    serviceName,
+			"pod_url":    podURL,
+			"edge_proxy": edgeProxyIP,
+		},
+		map[string]interface{}{
+			"avg_latency_ms": avgLatency.Seconds() * 1000,
+			"avg_rpm":        avgRPM,
+		},
+		time.Now(),
+	)
 
-	if err != nil {
-		return fmt.Errorf("failed to create batch points: %w", err)
-	}
-
-	tags := map[string]string{
-		"service":    serviceName,
-		"pod_url":    podURL,
-		"edge_proxy": edgeProxyIP,
-	}
-
-	fields := map[string]interface{}{
-		"avg_latency_ms": avgLatency.Seconds() * 1000,
-		"avg_rpm":        avgRPM,
-	}
-
-	pt, err := client.NewPoint("edge_proxy_service_metrics", tags, fields, time.Now())
-	if err != nil {
-		return fmt.Errorf("failed to create point for service %s, pod %s, and edge proxy %s: %w", serviceName, podURL, edgeProxyIP, err)
-	}
-
-	bp.AddPoint(pt)
-
-	if err := db.Client.Write(bp); err != nil {
-		return fmt.Errorf("failed to write metrics to InfluxDB: %w", err)
+	db.WriteAPI.WritePoint(point)
+	if err := db.WriteAPI.Errors(); err != nil {
+		return fmt.Errorf("failed to write to InfluxDB: %v", err)
 	}
 
 	return nil
-}
-
-func parseLatency(latencyInterface interface{}, node string) (float64, error) {
-	switch latencyInterface.(type) {
-	case float64:
-		return latencyInterface.(float64), nil
-	case string:
-		latencyStr := latencyInterface.(string)
-		return strconv.ParseFloat(latencyStr, 64)
-	case json.Number:
-		return latencyInterface.(json.Number).Float64()
-	default:
-		return 0, fmt.Errorf("unexpected type for latency value on node %s: %T", node, latencyInterface)
-	}
-}
-
-func parseScore(scoreInterface interface{}, node string) (float64, error) {
-	switch scoreInterface.(type) {
-	case float64:
-		return scoreInterface.(float64), nil
-	case string:
-		scoreStr := scoreInterface.(string)
-		return strconv.ParseFloat(scoreStr, 64)
-	case json.Number:
-		return scoreInterface.(json.Number).Float64()
-	default:
-		return 0, fmt.Errorf("unexpected type for score value on node %s: %T", node, scoreInterface)
-	}
 }

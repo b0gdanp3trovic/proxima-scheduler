@@ -45,8 +45,11 @@ spec:
         - name: INCLUDED_NAMESPACES
           value: "default"
         - name: INFLUXDB_ADDRESS
-          value: "http://influxdb-service.influx.svc.cluster.local:8086"
-        - name: INFLUXDB_DB_NAME
-          value: "proxima_scheduler"
+          value: "https://74.207.233.55:8086"
+        - name: INFLUXDB_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: influxdb-auth-token
+              key: INFLUXDB_TOKEN
       serviceAccountName: pinger-sa
       restartPolicy: Always

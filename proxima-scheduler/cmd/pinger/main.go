@@ -4,6 +4,7 @@ import (
 	"log"
 	"os"
 
+	"github.com/b0gdanp3trovic/proxima-scheduler/pinger"
 	"github.com/b0gdanp3trovic/proxima-scheduler/util"
 	influxdb2 "github.com/influxdata/influxdb-client-go/v2"
 )
@@ -11,7 +12,7 @@ import (
 func main() {
 	cfg := util.LoadConfig()
 
-	_, err := util.GetClientset()
+	clientset, err := util.GetClientset()
 
 	if err != nil {
 		log.Fatalf("Failed to obtain clientset: %v", err)
@@ -19,22 +20,13 @@ func main() {
 	}
 
 	// Initialize latency DB
-	influxdb2.NewClient(cfg.InfluxDBAddress, cfg.InfluxDBToken)
+	influxClient := influxdb2.NewClient(cfg.InfluxDBAddress, cfg.InfluxDBToken)
+	influxDb := util.NewInfluxDB(influxClient, "proxima", "proxima")
 
-	if err != nil {
-		log.Fatalf("Failed to initialize InfluxDB client: %v", err)
-		os.Exit(1)
-	}
+	pinger, err := pinger.NewPinger(cfg.PingInterval, clientset, cfg.DatabaseEnabled, influxDb, cfg.NodeIP)
 
-	//influxDb, err := util.NewInfluxDB(influxClient, cfg.DbName)
-	//if err != nil {
-	//	log.Fatalf("Failed to initialize influx db: %v", err)
-	//}
-	//
-	//pinger, err := pinger.NewPinger(cfg.PingInterval, clientset, cfg.DatabaseEnabled, influxDb, cfg.NodeIP)
-	//
-	//// Start pinger
-	//pinger.Run()
+	// Start pinger
+	pinger.Run()
 
 	// Block the function from exiting
 	select {}

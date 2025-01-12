@@ -1,1 +1,1 @@
-kubectl port-forward svc/consul-consul-server 8500:8500 -n consul
+kubectl port-forward svc/proxima-eu-server 8500:8500 -n consul

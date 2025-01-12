@@ -7,7 +7,7 @@ import (
 
 	"github.com/b0gdanp3trovic/proxima-scheduler/scheduler"
 	"github.com/b0gdanp3trovic/proxima-scheduler/util"
-	client "github.com/influxdata/influxdb1-client/v2"
+	influxdb2 "github.com/influxdata/influxdb-client-go/v2"
 )
 
 func main() {
@@ -20,20 +20,8 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Initialize latency DB
-	influxClient, err := client.NewHTTPClient(client.HTTPConfig{
-		Addr: cfg.InfluxDBAddress,
-	})
-
-	if err != nil {
-		log.Fatalf("Failed to initialize InfluxDB client: %v", err)
-		os.Exit(1)
-	}
-
-	influxDb, err := util.NewInfluxDB(influxClient, cfg.DbName)
-	if err != nil {
-		log.Fatalf("Failed to initialize influx db: %v", err)
-	}
+	influxClient := influxdb2.NewClient(cfg.InfluxDBAddress, cfg.InfluxDBToken)
+	influxDb := util.NewInfluxDB(influxClient, "proxima", "proxima")
 
 	schedulerWorker, err := scheduler.NewScheduler(cfg.SchedulerName, cfg.IncludedNamespaces, clientset, influxDb)
 
