@@ -64,11 +64,11 @@ func (db *InfluxDB) SavePingTime(latencies map[string]time.Duration, edgeProxyAd
 	}
 
 	db.WriteAPI.Flush()
-
-	if err := db.WriteAPI.Errors(); err != nil {
+	select {
+	case err := <-db.WriteAPI.Errors():
 		return fmt.Errorf("failed to write to InfluxDB: %v", err)
+	default:
 	}
-
 	return nil
 }
 
@@ -87,6 +87,9 @@ func (db *InfluxDB) SaveRequestLatency(podURL, nodeIP, edgeproxyNodeIP string, l
 	)
 
 	db.WriteAPI.WritePoint(point)
+	if err := db.WriteAPI.Errors(); err != nil {
+		return fmt.Errorf("failed to write to InfluxDB: %v", err)
+	}
 	return nil
 }
 
