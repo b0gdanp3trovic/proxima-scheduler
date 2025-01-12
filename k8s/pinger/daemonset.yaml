@@ -45,7 +45,7 @@ spec:
         - name: INCLUDED_NAMESPACES
           value: "default"
         - name: INFLUXDB_ADDRESS
-          value: "https://74.207.233.55:8086"
+          value: "http://172.104.247.42:8086"
         - name: INFLUXDB_TOKEN
           valueFrom:
             secretKeyRef:

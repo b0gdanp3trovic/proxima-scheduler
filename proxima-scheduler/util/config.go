@@ -39,7 +39,7 @@ func LoadConfig() *Config {
 	admissionKeyPath := getEnv("ADMISSION_KEY_PATH", "")
 	clusterName := getEnv("CLUSTER_NAME", "")
 	consulCertPath := getEnv("CONSUL_CERT_PATH", "")
-	influxDBToken := getEnv("INFLUX_DB_TOKEN", "")
+	influxDBToken := getEnv("INFLUXDB_TOKEN", "")
 
 	return &Config{
 		InfluxDBAddress:    influxDBAddress,
