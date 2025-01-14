@@ -24,6 +24,10 @@ func main() {
 	influxDb := util.NewInfluxDB(influxClient, "proxima", "proxima")
 
 	pinger, err := pinger.NewPinger(cfg.PingInterval, clientset, cfg.DatabaseEnabled, influxDb, cfg.NodeIP, cfg.EdgeProxies)
+	if err != nil {
+		log.Fatalf("Failed to initialize pinger: %v", err)
+		os.Exit(1)
+	}
 
 	// Start pinger
 	pinger.Run()
