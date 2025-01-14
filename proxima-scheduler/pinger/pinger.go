@@ -249,12 +249,18 @@ func (p *Pinger) getNodeExternalIP() (string, error) {
 
 	for _, node := range nodes.Items {
 		for _, addr := range node.Status.Addresses {
-			if addr.Type == "ExternalIP" && node.Name == p.NodeIP {
-				return addr.Address, nil
+			if addr.Type == "InternalIP" && addr.Address == p.NodeIP {
+				for _, extAddr := range node.Status.Addresses {
+					if extAddr.Type == "ExternalIP" {
+						return extAddr.Address, nil
+					}
+				}
+				return "", fmt.Errorf("node %s has no ExternalIP", node.Name)
 			}
 		}
 	}
-	return "", fmt.Errorf("external IP not found for node %s", p.NodeIP)
+
+	return "", fmt.Errorf("node with InternalIP %s not found", p.NodeIP)
 }
 
 func (p *Pinger) Stop() {
