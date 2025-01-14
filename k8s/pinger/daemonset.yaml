@@ -51,5 +51,7 @@ spec:
             secretKeyRef:
               name: influxdb-auth-token
               key: INFLUXDB_TOKEN
+        - name: EDGE_PROXIES
+          value: "172.104.148.76,74.207.233.55"
       serviceAccountName: pinger-sa
       restartPolicy: Always

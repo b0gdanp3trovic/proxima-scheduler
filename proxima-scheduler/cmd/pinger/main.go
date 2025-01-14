@@ -23,7 +23,7 @@ func main() {
 	influxClient := influxdb2.NewClient(cfg.InfluxDBAddress, cfg.InfluxDBToken)
 	influxDb := util.NewInfluxDB(influxClient, "proxima", "proxima")
 
-	pinger, err := pinger.NewPinger(cfg.PingInterval, clientset, cfg.DatabaseEnabled, influxDb, cfg.NodeIP)
+	pinger, err := pinger.NewPinger(cfg.PingInterval, clientset, cfg.DatabaseEnabled, influxDb, cfg.NodeIP, cfg.EdgeProxies)
 
 	// Start pinger
 	pinger.Run()

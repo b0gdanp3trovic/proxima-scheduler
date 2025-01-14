@@ -12,28 +12,45 @@ import (
 )
 
 type Pinger struct {
-	Addr      map[string]struct{}
-	Latencies map[string]time.Duration
-	Interval  time.Duration
-	stopChan  chan struct{}
-	DBEnabled bool
-	DB        util.Database
-	Clientset *kubernetes.Clientset
-	mu        sync.Mutex
-	NodeIP    string
+	Addr        map[string]struct{}
+	Latencies   map[string]time.Duration
+	Interval    time.Duration
+	stopChan    chan struct{}
+	DBEnabled   bool
+	DB          util.Database
+	Clientset   *kubernetes.Clientset
+	mu          sync.Mutex
+	NodeIP      string
+	EdgeProxies []string
 }
 
-func NewPinger(interval time.Duration, clientset *kubernetes.Clientset, dbEnabled bool, db util.Database, nodeIP string) (*Pinger, error) {
+func NewPinger(
+	interval time.Duration,
+	clientset *kubernetes.Clientset,
+	dbEnabled bool,
+	db util.Database,
+	nodeIP string,
+	edgeProxies []string,
+) (*Pinger, error) {
 	p := &Pinger{
-		Addr:      make(map[string]struct{}),
-		Latencies: make(map[string]time.Duration),
-		Interval:  interval,
-		stopChan:  make(chan struct{}),
-		DBEnabled: dbEnabled,
-		DB:        db,
-		Clientset: clientset,
-		NodeIP:    nodeIP,
+		Addr:        make(map[string]struct{}),
+		Latencies:   make(map[string]time.Duration),
+		Interval:    interval,
+		stopChan:    make(chan struct{}),
+		DBEnabled:   dbEnabled,
+		DB:          db,
+		Clientset:   clientset,
+		NodeIP:      nodeIP,
+		EdgeProxies: []string{},
 	}
+
+	// Filter out current node ip from edge proxy IPs
+	filteredEdgeProxies, err := p.ObtainEdgeProxies()
+	if err != nil {
+		return nil, fmt.Errorf("failed to obtain edge proxies: %w", err)
+	}
+
+	p.EdgeProxies = filteredEdgeProxies
 
 	return p, nil
 }
@@ -44,6 +61,22 @@ func (p *Pinger) AddAddress(address string) {
 
 	p.Addr[address] = struct{}{}
 	p.Latencies[address] = 0
+}
+
+func (p *Pinger) ObtainEdgeProxies() ([]string, error) {
+	var filteredEdgeProxies []string
+	currentNodeIP, err := p.getNodeExternalIP()
+	if err != nil {
+		fmt.Printf("Error obtaining current node IP: %v\n", err)
+		return nil, err
+	}
+
+	for _, edgeProxyIP := range p.EdgeProxies {
+		if edgeProxyIP != currentNodeIP {
+			filteredEdgeProxies = append(filteredEdgeProxies, edgeProxyIP)
+		}
+	}
+	return filteredEdgeProxies, nil
 }
 
 func (p *Pinger) RemoveAddress(address string) {
@@ -206,6 +239,22 @@ func (p *Pinger) Run() {
 			}
 		}
 	}()
+}
+
+func (p *Pinger) getNodeExternalIP() (string, error) {
+	nodes, err := util.DiscoverNodes(p.Clientset)
+	if err != nil {
+		return "", fmt.Errorf("failed to discover nodes: %w", err)
+	}
+
+	for _, node := range nodes.Items {
+		for _, addr := range node.Status.Addresses {
+			if addr.Type == "ExternalIP" && node.Name == p.NodeIP {
+				return addr.Address, nil
+			}
+		}
+	}
+	return "", fmt.Errorf("external IP not found for node %s", p.NodeIP)
 }
 
 func (p *Pinger) Stop() {

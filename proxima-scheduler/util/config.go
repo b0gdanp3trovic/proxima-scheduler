@@ -23,6 +23,7 @@ type Config struct {
 	AdmissionKeyPath   string
 	ClusterName        string
 	ConsulCertPath     string
+	EdgeProxies        []string
 }
 
 func LoadConfig() *Config {
@@ -31,7 +32,7 @@ func LoadConfig() *Config {
 	databaseEnabled := getEnvAsBool("DATABASE_ENABLED", true)
 	pingInterval := getEnvAsDuration("PING_INTERVAL", 10*time.Second)
 	scoringInterval := getEnvAsDuration("SCORING_INTERVAL", 30*time.Second)
-	includedNamespaces := parseIncludedNamespaces("INCLUDED_NAMESPACES", []string{"default"})
+	includedNamespaces := parseCommaSeparatedArray("INCLUDED_NAMESPACES", []string{"default"})
 	schedulerName := getEnv("SCHEDULER_NAME", "proxima-scheduler")
 	nodeIP := getEnv("NODE_IP", "")
 	consulURL := getEnv("CONSUL_URL", "")
@@ -40,6 +41,7 @@ func LoadConfig() *Config {
 	clusterName := getEnv("CLUSTER_NAME", "")
 	consulCertPath := getEnv("CONSUL_CERT_PATH", "")
 	influxDBToken := getEnv("INFLUXDB_TOKEN", "")
+	edgeProxies := parseCommaSeparatedArray("EDGE_PROXIES", []string{"default"})
 
 	return &Config{
 		InfluxDBAddress:    influxDBAddress,
@@ -56,6 +58,7 @@ func LoadConfig() *Config {
 		AdmissionKeyPath:   admissionKeyPath,
 		ClusterName:        clusterName,
 		ConsulCertPath:     consulCertPath,
+		EdgeProxies:        edgeProxies,
 	}
 }
 
@@ -93,7 +96,7 @@ func getEnvAsDuration(name string, defaultVal time.Duration) time.Duration {
 	return val
 }
 
-func parseIncludedNamespaces(name string, defaultVal []string) []string {
+func parseCommaSeparatedArray(name string, defaultVal []string) []string {
 	valStr := getEnv(name, "")
 	if valStr == "" {
 		return defaultVal
