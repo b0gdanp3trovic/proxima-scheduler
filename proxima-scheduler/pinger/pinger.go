@@ -45,7 +45,7 @@ func NewPinger(
 	}
 
 	// Filter out current node ip from edge proxy IPs
-	filteredEdgeProxies, err := p.ObtainEdgeProxies()
+	filteredEdgeProxies, err := p.ObtainEdgeProxies(edgeProxies)
 	if err != nil {
 		return nil, fmt.Errorf("failed to obtain edge proxies: %w", err)
 	}
