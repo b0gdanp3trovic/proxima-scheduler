@@ -140,9 +140,16 @@ func (p *Pinger) PingAll() {
 	var addresses []string
 
 	p.mu.Lock()
+	// Add worker node addresses
 	for address := range p.Addr {
 		addresses = append(addresses, address)
 	}
+
+	// Also add edge proxies
+	for _, edgeProxyAddress := range p.EdgeProxies {
+		addresses = append(addresses, edgeProxyAddress)
+	}
+
 	p.mu.Unlock()
 
 	for _, address := range addresses {
