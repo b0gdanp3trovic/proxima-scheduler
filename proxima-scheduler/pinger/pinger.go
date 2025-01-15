@@ -146,7 +146,9 @@ func (p *Pinger) PingAll() {
 	}
 
 	// Also add edge proxies
+	fmt.Println("Edge proxy addresses:")
 	for _, edgeProxyAddress := range p.EdgeProxies {
+		fmt.Printf(" - %s\n", edgeProxyAddress) // Print each edge proxy address
 		addresses = append(addresses, edgeProxyAddress)
 	}
 
@@ -190,6 +192,7 @@ func (p *Pinger) PingAll() {
 		p.SaveLatenciesToDB()
 	}
 }
+
 func (p *Pinger) SaveLatenciesToDB() {
 	if !p.DBEnabled {
 		log.Println("Database disabled, skipping database save.")
