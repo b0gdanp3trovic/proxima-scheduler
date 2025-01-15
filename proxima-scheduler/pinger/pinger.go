@@ -63,7 +63,7 @@ func (p *Pinger) AddAddress(address string) {
 	p.Latencies[address] = 0
 }
 
-func (p *Pinger) ObtainEdgeProxies() ([]string, error) {
+func (p *Pinger) ObtainEdgeProxies(unfilteredEdgeproxies []string) ([]string, error) {
 	var filteredEdgeProxies []string
 	currentNodeIP, err := p.getNodeExternalIP()
 	if err != nil {
@@ -71,7 +71,7 @@ func (p *Pinger) ObtainEdgeProxies() ([]string, error) {
 		return nil, err
 	}
 
-	for _, edgeProxyIP := range p.EdgeProxies {
+	for _, edgeProxyIP := range unfilteredEdgeproxies {
 		if edgeProxyIP != currentNodeIP {
 			filteredEdgeProxies = append(filteredEdgeProxies, edgeProxyIP)
 		}
