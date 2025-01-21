@@ -102,3 +102,25 @@ func ExtractNodeAddresses(nodes []v1.Node) []string {
 	}
 	return addresses
 }
+
+func GetNodeExternalIP(clientset *kubernetes.Clientset, internalNodeIP string) (string, error) {
+	nodes, err := DiscoverNodes(clientset)
+	if err != nil {
+		return "", fmt.Errorf("failed to discover nodes: %w", err)
+	}
+
+	for _, node := range nodes.Items {
+		for _, addr := range node.Status.Addresses {
+			if addr.Type == "InternalIP" && addr.Address == internalNodeIP {
+				for _, extAddr := range node.Status.Addresses {
+					if extAddr.Type == "ExternalIP" {
+						return extAddr.Address, nil
+					}
+				}
+				return "", fmt.Errorf("node %s has no ExternalIP", node.Name)
+			}
+		}
+	}
+
+	return "", fmt.Errorf("node with InternalIP %s not found", internalNodeIP)
+}

@@ -65,7 +65,7 @@ func (p *Pinger) AddAddress(address string) {
 
 func (p *Pinger) ObtainEdgeProxies(unfilteredEdgeproxies []string) ([]string, error) {
 	var filteredEdgeProxies []string
-	currentNodeIP, err := p.getNodeExternalIP()
+	currentNodeIP, err := util.GetNodeExternalIP(p.Clientset, p.NodeIP)
 	if err != nil {
 		fmt.Printf("Error obtaining current node IP: %v\n", err)
 		return nil, err
@@ -249,28 +249,6 @@ func (p *Pinger) Run() {
 			}
 		}
 	}()
-}
-
-func (p *Pinger) getNodeExternalIP() (string, error) {
-	nodes, err := util.DiscoverNodes(p.Clientset)
-	if err != nil {
-		return "", fmt.Errorf("failed to discover nodes: %w", err)
-	}
-
-	for _, node := range nodes.Items {
-		for _, addr := range node.Status.Addresses {
-			if addr.Type == "InternalIP" && addr.Address == p.NodeIP {
-				for _, extAddr := range node.Status.Addresses {
-					if extAddr.Type == "ExternalIP" {
-						return extAddr.Address, nil
-					}
-				}
-				return "", fmt.Errorf("node %s has no ExternalIP", node.Name)
-			}
-		}
-	}
-
-	return "", fmt.Errorf("node with InternalIP %s not found", p.NodeIP)
 }
 
 func (p *Pinger) Stop() {
