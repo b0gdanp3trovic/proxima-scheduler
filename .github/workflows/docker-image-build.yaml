@@ -33,4 +33,3 @@ jobs:
         tags: |
           bogdanb0gdan/proxima-scheduler:latest
           bogdanb0gdan/proxima-scheduler:${{ github.sha }}
-
