@@ -250,11 +250,11 @@ func (p *Pinger) Run() {
 			select {
 			case <-ticker.C:
 				p.updateAddresses()
-				fmt.Println("Finished updating addresses")
+				fmt.Println("Finished updating addresses.")
 				p.PingAll()
-				fmt.Println("Finished pinging all addresses")
+				fmt.Println("Finished pinging all addresses.")
 				p.AggregateLatencies()
-				fmt.Println("Finished aggregating latencies")
+				fmt.Println("Finished aggregating latencies.")
 
 			case <-p.stopChan:
 				fmt.Println("Stopping pinger.")
