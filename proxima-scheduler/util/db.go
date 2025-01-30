@@ -21,6 +21,7 @@ type Database interface {
 	GetNodeScores() (NodeScores, error)
 	SaveRequestLatency(podURL string, nodeIP string, edgeproxyNodeIP string, latency time.Duration) error
 	SaveNodeScores(scores map[string]float64) error
+	GetLatency(source, destination string) (time.Duration, error)
 }
 
 type InfluxDB struct {
@@ -309,4 +310,33 @@ func (db *InfluxDB) handleWriteAPIErrors() error {
 	default:
 		return nil
 	}
+}
+
+func (db *InfluxDB) GetLatency(source, destination string) (time.Duration, error) {
+	query := fmt.Sprintf(`
+		from(bucket: "%s")
+		|> range(start: -1h)
+		|> filter(fn: (r) => r._measurement == "ping_times")
+		|> filter(fn: (r) => r.source == "%s" and r.destination == "%s")
+		|> last()
+	`, db.Bucket, source, destination)
+
+	result, err := db.QueryAPI.Query(context.Background(), query)
+	if err != nil {
+		return 0, fmt.Errorf("failed to query latency from %s to %s: %w", source, destination, err)
+	}
+
+	if result.Next() {
+		latency, ok := result.Record().Value().(time.Duration)
+		if !ok {
+			return 0, fmt.Errorf("failed to parse latency value for %s -> %s: %+v", source, destination, result.Record())
+		}
+		return latency, nil
+	}
+
+	if result.Err() != nil {
+		return 0, fmt.Errorf("query result error for %s -> %s: %w", source, destination, result.Err())
+	}
+
+	return 0, fmt.Errorf("no latency data found for %s -> %s", source, destination)
 }

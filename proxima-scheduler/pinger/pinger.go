@@ -11,17 +11,24 @@ import (
 	"k8s.io/client-go/kubernetes"
 )
 
+type AggregatedLatencyKey struct {
+	Source      string
+	Destination string
+}
+
 type Pinger struct {
-	Addr        map[string]struct{}
-	Latencies   map[string]time.Duration
-	Interval    time.Duration
-	stopChan    chan struct{}
-	DBEnabled   bool
-	DB          util.Database
-	Clientset   *kubernetes.Clientset
-	mu          sync.Mutex
-	NodeIP      string
-	EdgeProxies []string
+	Addr                map[string]struct{}
+	Latencies           map[string]time.Duration
+	AggregatedLatencies map[AggregatedLatencyKey]time.Duration
+	Interval            time.Duration
+	stopChan            chan struct{}
+	DBEnabled           bool
+	DB                  util.Database
+	Clientset           *kubernetes.Clientset
+	mu                  sync.Mutex
+	NodeIP              string
+	ExternalNodeIP      string
+	EdgeProxies         []string
 }
 
 func NewPinger(
@@ -33,24 +40,27 @@ func NewPinger(
 	edgeProxies []string,
 ) (*Pinger, error) {
 	p := &Pinger{
-		Addr:        make(map[string]struct{}),
-		Latencies:   make(map[string]time.Duration),
-		Interval:    interval,
-		stopChan:    make(chan struct{}),
-		DBEnabled:   dbEnabled,
-		DB:          db,
-		Clientset:   clientset,
-		NodeIP:      nodeIP,
-		EdgeProxies: []string{},
+		Addr:                make(map[string]struct{}),
+		Latencies:           make(map[string]time.Duration),
+		AggregatedLatencies: make(map[AggregatedLatencyKey]time.Duration),
+		Interval:            interval,
+		stopChan:            make(chan struct{}),
+		DBEnabled:           dbEnabled,
+		DB:                  db,
+		Clientset:           clientset,
+		NodeIP:              nodeIP,
+		ExternalNodeIP:      "",
+		EdgeProxies:         []string{},
 	}
 
 	// Filter out current node ip from edge proxy IPs
-	filteredEdgeProxies, err := p.ObtainEdgeProxies(edgeProxies)
+	externalNodeIP, filteredEdgeProxies, err := util.ObtainEdgeProxies(edgeProxies, p.Clientset, p.NodeIP)
 	if err != nil {
 		return nil, fmt.Errorf("failed to obtain edge proxies: %w", err)
 	}
 
 	p.EdgeProxies = filteredEdgeProxies
+	p.ExternalNodeIP = externalNodeIP
 
 	return p, nil
 }
@@ -61,22 +71,6 @@ func (p *Pinger) AddAddress(address string) {
 
 	p.Addr[address] = struct{}{}
 	p.Latencies[address] = 0
-}
-
-func (p *Pinger) ObtainEdgeProxies(unfilteredEdgeproxies []string) ([]string, error) {
-	var filteredEdgeProxies []string
-	currentNodeIP, err := util.GetNodeExternalIP(p.Clientset, p.NodeIP)
-	if err != nil {
-		fmt.Printf("Error obtaining current node IP: %v\n", err)
-		return nil, err
-	}
-
-	for _, edgeProxyIP := range unfilteredEdgeproxies {
-		if edgeProxyIP != currentNodeIP {
-			filteredEdgeProxies = append(filteredEdgeProxies, edgeProxyIP)
-		}
-	}
-	return filteredEdgeProxies, nil
 }
 
 func (p *Pinger) RemoveAddress(address string) {
@@ -133,6 +127,13 @@ func (p *Pinger) updateAddresses() {
 			p.RemoveAddress(address)
 			fmt.Printf("Node removed: %s\n", address)
 		}
+
+		p.mu.Lock()
+		for _, ep := range p.EdgeProxies {
+			key := AggregatedLatencyKey{Source: ep, Destination: address}
+			delete(p.AggregatedLatencies, key)
+		}
+		p.mu.Unlock()
 	}
 }
 
@@ -193,6 +194,23 @@ func (p *Pinger) PingAll() {
 	}
 }
 
+func (p *Pinger) AggregateLatencies() {
+	for _, ep := range p.EdgeProxies {
+		latencyToCurrent, err := p.DB.GetLatency(ep, p.ExternalNodeIP)
+
+		if err != nil {
+			fmt.Printf("Failed to get latency from %s to %s: %v\n", ep, p.ExternalNodeIP, err)
+			continue
+		}
+
+		for address, latency := range p.Latencies {
+			totalLatency := latencyToCurrent + latency
+			key := AggregatedLatencyKey{Source: ep, Destination: address}
+			p.AggregatedLatencies[key] = totalLatency
+		}
+	}
+}
+
 func (p *Pinger) SaveLatenciesToDB() {
 	if !p.DBEnabled {
 		log.Println("Database disabled, skipping database save.")
@@ -213,6 +231,13 @@ func (p *Pinger) SaveLatenciesToDB() {
 	}
 }
 
+/*
+TODO
+func(p *Pinger) SaveAggregatedLatenciesToDB() {
+	...
+}
+*/
+
 func (p *Pinger) Run() {
 	go func() {
 		p.updateAddresses()
@@ -221,23 +246,15 @@ func (p *Pinger) Run() {
 		ticker := time.NewTicker(p.Interval)
 		defer ticker.Stop()
 
-		// Ticker for periodic pinging
-		pingTicker := time.NewTicker(p.Interval)
-		defer pingTicker.Stop()
-
-		// Ticker for periodic discovery
-		discoverTicker := time.NewTicker(20 * time.Second)
-		defer discoverTicker.Stop()
-
 		for {
 			select {
 			case <-ticker.C:
-				p.PingAll()
-				fmt.Println("Pinged all addresses")
-
-			case <-discoverTicker.C:
 				p.updateAddresses()
-				fmt.Println("Updated node addresses")
+				fmt.Println("Finished updating addresses")
+				p.PingAll()
+				fmt.Println("Finished pinging all addresses")
+				p.AggregateLatencies()
+				fmt.Println("Finished aggregating latencies")
 
 			case <-p.stopChan:
 				fmt.Println("Stopping pinger.")

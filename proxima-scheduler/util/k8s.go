@@ -103,7 +103,7 @@ func ExtractNodeAddresses(nodes []v1.Node) []string {
 	return addresses
 }
 
-func GetNodeExternalIP(clientset *kubernetes.Clientset, internalNodeIP string) (string, error) {
+func getNodeExternalIP(clientset *kubernetes.Clientset, internalNodeIP string) (string, error) {
 	nodes, err := DiscoverNodes(clientset)
 	if err != nil {
 		return "", fmt.Errorf("failed to discover nodes: %w", err)
@@ -123,4 +123,20 @@ func GetNodeExternalIP(clientset *kubernetes.Clientset, internalNodeIP string) (
 	}
 
 	return "", fmt.Errorf("node with InternalIP %s not found", internalNodeIP)
+}
+
+func ObtainEdgeProxies(unfilteredEdgeproxies []string, clientset *kubernetes.Clientset, nodeIP string) (string, []string, error) {
+	var filteredEdgeProxies []string
+	currentNodeIP, err := getNodeExternalIP(clientset, nodeIP)
+	if err != nil {
+		fmt.Printf("Error obtaining current node IP: %v\n", err)
+		return "", nil, err
+	}
+
+	for _, edgeProxyIP := range unfilteredEdgeproxies {
+		if edgeProxyIP != currentNodeIP {
+			filteredEdgeProxies = append(filteredEdgeProxies, edgeProxyIP)
+		}
+	}
+	return currentNodeIP, filteredEdgeProxies, nil
 }
