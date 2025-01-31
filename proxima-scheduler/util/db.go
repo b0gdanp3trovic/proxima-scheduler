@@ -317,7 +317,7 @@ func (db *InfluxDB) GetLatency(source, destination string) (time.Duration, error
 		from(bucket: "%s")
 		|> range(start: -1h)
 		|> filter(fn: (r) => r._measurement == "ping_times")
-		|> filter(fn: (r) => r.source == "%s" and r.destination == "%s")
+		|> filter(fn: (r) => r.edge_proxy == "%s" and r.node == "%s")
 		|> last()
 	`, db.Bucket, source, destination)
 
