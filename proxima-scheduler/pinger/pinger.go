@@ -149,7 +149,7 @@ func (p *Pinger) PingAll() {
 	// Also add edge proxies
 	fmt.Println("Edge proxy addresses:")
 	for _, edgeProxyAddress := range p.EdgeProxies {
-		fmt.Printf(" - %s\n", edgeProxyAddress) // Print each edge proxy address
+		fmt.Printf(" - %s\n", edgeProxyAddress)
 		addresses = append(addresses, edgeProxyAddress)
 	}
 
@@ -204,9 +204,12 @@ func (p *Pinger) AggregateLatencies() {
 		}
 
 		for address, latency := range p.Latencies {
-			totalLatency := latencyToCurrent + latency
-			key := AggregatedLatencyKey{Source: ep, Destination: address}
-			p.AggregatedLatencies[key] = totalLatency
+			// Don't add ep1 -> ep2 -> ep1
+			if address != ep {
+				totalLatency := latencyToCurrent + latency
+				key := AggregatedLatencyKey{Source: ep, Destination: address}
+				p.AggregatedLatencies[key] = totalLatency
+			}
 		}
 	}
 
