@@ -209,6 +209,11 @@ func (p *Pinger) AggregateLatencies() {
 			p.AggregatedLatencies[key] = totalLatency
 		}
 	}
+
+	fmt.Println("Aggregated Latencies:")
+	for key, latency := range p.AggregatedLatencies {
+		fmt.Printf("Source: %s -> Destination: %s, Latency: %v\n", key.Source, key.Destination, latency)
+	}
 }
 
 func (p *Pinger) SaveLatenciesToDB() {
