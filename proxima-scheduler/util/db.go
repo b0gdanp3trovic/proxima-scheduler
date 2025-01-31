@@ -327,10 +327,12 @@ func (db *InfluxDB) GetLatency(source, destination string) (time.Duration, error
 	}
 
 	if result.Next() {
-		latency, ok := result.Record().Value().(time.Duration)
+		latencyFloat, ok := result.Record().Value().(float64)
 		if !ok {
 			return 0, fmt.Errorf("failed to parse latency value for %s -> %s: %+v", source, destination, result.Record())
 		}
+		latency := time.Duration(latencyFloat * float64(time.Millisecond))
+
 		return latency, nil
 	}
 
