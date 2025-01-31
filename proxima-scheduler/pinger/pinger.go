@@ -205,6 +205,7 @@ func (p *Pinger) AggregateLatencies() {
 
 		for address, latency := range p.Latencies {
 			// Don't add ep1 -> ep2 -> ep1
+			// TODO: Omit all other edge proxies
 			if address != ep {
 				totalLatency := latencyToCurrent + latency
 				key := AggregatedLatencyKey{Source: ep, Destination: address}
