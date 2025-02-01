@@ -204,13 +204,14 @@ func (p *Pinger) AggregateLatencies() {
 		}
 
 		for address, latency := range p.Latencies {
-			// Don't add ep1 -> ep2 -> ep1
-			// TODO: Omit all other edge proxies
-			if address != ep {
-				totalLatency := latencyToCurrent + latency
-				key := AggregatedLatencyKey{Source: ep, Destination: address}
-				p.AggregatedLatencies[key] = totalLatency
+			// Exclude all edge proxies
+			if p.IsEdgeProxy(address) {
+				continue
 			}
+
+			totalLatency := latencyToCurrent + latency
+			key := AggregatedLatencyKey{Source: ep, Destination: address}
+			p.AggregatedLatencies[key] = totalLatency
 		}
 	}
 
@@ -218,6 +219,15 @@ func (p *Pinger) AggregateLatencies() {
 	for key, latency := range p.AggregatedLatencies {
 		fmt.Printf("Source: %s -> Destination: %s, Latency: %v\n", key.Source, key.Destination, latency)
 	}
+}
+
+func (p *Pinger) IsEdgeProxy(address string) bool {
+	for _, ep := range p.EdgeProxies {
+		if ep == address {
+			return true
+		}
+	}
+	return false
 }
 
 func (p *Pinger) SaveLatenciesToDB() {
