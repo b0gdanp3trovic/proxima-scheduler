@@ -14,6 +14,7 @@ import (
 
 type Database interface {
 	SavePingTime(latencies map[string]time.Duration, edgeProxyAddress string) error
+	SaveAggregatedLatencies(latencies map[AggregatedLatencyKey]time.Duration) error
 	GetAveragePingTime() (NodeLatencies, error)
 	GetAveragePingTimeByEdges() (EdgeProxyToNodeLatencies, error)
 	GetAverageLatenciesForEdge(edgeProxyAddress string) (NodeLatencies, error)
@@ -37,6 +38,11 @@ type NodeLatencies map[string]float64
 type EdgeProxyToNodeLatencies map[string]map[string]float64
 type NodeScores map[string]float64
 
+type AggregatedLatencyKey struct {
+	Source      string
+	Destination string
+}
+
 func NewInfluxDB(client influxdb2.Client, org, bucket string) *InfluxDB {
 	return &InfluxDB{
 		Bucket:   bucket,
@@ -54,6 +60,31 @@ func (db *InfluxDB) SavePingTime(latencies map[string]time.Duration, edgeProxyAd
 			map[string]string{
 				"node":       address,
 				"edge_proxy": edgeProxyAddress,
+			},
+			map[string]interface{}{
+				"latency_ms": latency.Seconds() * 1000,
+			},
+			time.Now(),
+		)
+
+		db.WriteAPI.WritePoint(point)
+	}
+
+	db.WriteAPI.Flush()
+	if err := db.handleWriteAPIErrors(); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (db *InfluxDB) SaveAggregatedLatencies(latencies map[AggregatedLatencyKey]time.Duration) error {
+	for key, latency := range latencies {
+		point := influxdb2.NewPoint(
+			"aggregated_latencies",
+			map[string]string{
+				"source":      key.Source,
+				"destination": key.Destination,
 			},
 			map[string]interface{}{
 				"latency_ms": latency.Seconds() * 1000,

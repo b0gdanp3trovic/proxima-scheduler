@@ -11,15 +11,10 @@ import (
 	"k8s.io/client-go/kubernetes"
 )
 
-type AggregatedLatencyKey struct {
-	Source      string
-	Destination string
-}
-
 type Pinger struct {
 	Addr                map[string]struct{}
 	Latencies           map[string]time.Duration
-	AggregatedLatencies map[AggregatedLatencyKey]time.Duration
+	AggregatedLatencies map[util.AggregatedLatencyKey]time.Duration
 	Interval            time.Duration
 	stopChan            chan struct{}
 	DBEnabled           bool
@@ -42,7 +37,7 @@ func NewPinger(
 	p := &Pinger{
 		Addr:                make(map[string]struct{}),
 		Latencies:           make(map[string]time.Duration),
-		AggregatedLatencies: make(map[AggregatedLatencyKey]time.Duration),
+		AggregatedLatencies: make(map[util.AggregatedLatencyKey]time.Duration),
 		Interval:            interval,
 		stopChan:            make(chan struct{}),
 		DBEnabled:           dbEnabled,
@@ -130,7 +125,7 @@ func (p *Pinger) updateAddresses() {
 
 		p.mu.Lock()
 		for _, ep := range p.EdgeProxies {
-			key := AggregatedLatencyKey{Source: ep, Destination: address}
+			key := util.AggregatedLatencyKey{Source: ep, Destination: address}
 			delete(p.AggregatedLatencies, key)
 		}
 		p.mu.Unlock()
@@ -210,7 +205,7 @@ func (p *Pinger) AggregateLatencies() {
 			}
 
 			totalLatency := latencyToCurrent + latency
-			key := AggregatedLatencyKey{Source: ep, Destination: address}
+			key := util.AggregatedLatencyKey{Source: ep, Destination: address}
 			p.AggregatedLatencies[key] = totalLatency
 		}
 	}
@@ -250,12 +245,19 @@ func (p *Pinger) SaveLatenciesToDB() {
 	}
 }
 
-/*
-TODO
-func(p *Pinger) SaveAggregatedLatenciesToDB() {
-	...
+func (p *Pinger) SaveAggregatedLatenciesToDB() {
+	if len(p.AggregatedLatencies) == 0 {
+		log.Println("Empty aggregated latencies table, nothing to save.")
+		return
+	}
+
+	log.Printf("Saving aggregated latencies to DB: %+v", p.AggregatedLatencies)
+
+	err := p.DB.SaveAggregatedLatencies(p.AggregatedLatencies)
+	if err != nil {
+		log.Printf("Failed to save aggregated latencies: %v", err)
+	}
 }
-*/
 
 func (p *Pinger) Run() {
 	go func() {
