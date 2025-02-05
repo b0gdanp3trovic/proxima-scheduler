@@ -81,10 +81,10 @@ func (db *InfluxDB) SavePingTime(latencies map[string]time.Duration, edgeProxyAd
 func (db *InfluxDB) SaveAggregatedLatencies(latencies map[AggregatedLatencyKey]time.Duration) error {
 	for key, latency := range latencies {
 		point := influxdb2.NewPoint(
-			"aggregated_latencies",
+			"ping_times",
 			map[string]string{
-				"source":      key.Source,
-				"destination": key.Destination,
+				"node":       key.Source,
+				"edge_proxy": key.Destination,
 			},
 			map[string]interface{}{
 				"latency_ms": latency.Seconds() * 1000,
