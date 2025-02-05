@@ -83,8 +83,8 @@ func (db *InfluxDB) SaveAggregatedLatencies(latencies map[AggregatedLatencyKey]t
 		point := influxdb2.NewPoint(
 			"ping_times",
 			map[string]string{
-				"node":       key.Source,
-				"edge_proxy": key.Destination,
+				"node":       key.Destination,
+				"edge_proxy": key.Source,
 			},
 			map[string]interface{}{
 				"latency_ms": latency.Seconds() * 1000,
