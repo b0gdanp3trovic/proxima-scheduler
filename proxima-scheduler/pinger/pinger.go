@@ -214,6 +214,8 @@ func (p *Pinger) AggregateLatencies() {
 	for key, latency := range p.AggregatedLatencies {
 		fmt.Printf("Source: %s -> Destination: %s, Latency: %v\n", key.Source, key.Destination, latency)
 	}
+
+	p.SaveAggregatedLatenciesToDB()
 }
 
 func (p *Pinger) IsEdgeProxy(address string) bool {
