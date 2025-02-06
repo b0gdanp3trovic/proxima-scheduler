@@ -3,7 +3,6 @@ package scheduler
 import (
 	"fmt"
 	"log"
-	"math"
 	"time"
 
 	"github.com/b0gdanp3trovic/proxima-scheduler/util"
@@ -63,25 +62,32 @@ func (sw *ScoresWorker) scoreNodes() {
 	}
 
 	rawLatencies := make(map[string]float64)
+	maxLatency := 0.0
 
-	// Perform Sigmoid normalization
-	threshold := 1.0
-	scale := 5.0
 	for edgeProxy, latencies := range nodeLatenciesByEdgeProxy {
-		edgeProxyWeight, exists := sw.EdgeWeights[edgeProxy]
-		if !exists {
-			log.Printf("Warning: Edge proxy %s has no initialized weight, skipping...", edgeProxy)
-			continue
-		}
+		edgeProxyWeight := sw.EdgeWeights[edgeProxy]
 
 		for nodeIP, latency := range latencies {
-			rawLatencies[nodeIP] += edgeProxyWeight * latency
+			if latency > maxLatency {
+				maxLatency = latency
+			}
+
+			if _, exists := rawLatencies[nodeIP]; !exists {
+				rawLatencies[nodeIP] = edgeProxyWeight * latency
+			} else {
+				rawLatencies[nodeIP] = (rawLatencies[nodeIP] + edgeProxyWeight*latency) / 2
+			}
 		}
 	}
 
+	if maxLatency == 0 {
+		log.Println("Max latency is zero, skipping scoring to avoid division by zero.")
+		return
+	}
+
 	for nodeIP, latency := range rawLatencies {
-		sw.Scores[nodeIP] = sigmoidScore(latency, threshold, scale)
-		log.Printf("Sigmoid score for node %s: %f\n", nodeIP, sw.Scores[nodeIP])
+		sw.Scores[nodeIP] = 1 - (latency / maxLatency)
+		log.Printf("Node %s - Latency: %.2f ms, Score: %.4f\n", nodeIP, latency, sw.Scores[nodeIP])
 	}
 
 	err = sw.Db.SaveNodeScores(sw.Scores)
@@ -90,11 +96,6 @@ func (sw *ScoresWorker) scoreNodes() {
 	}
 
 	log.Printf("Saved node scores.")
-}
-
-func sigmoidScore(latency, threshold, scale float64) float64 {
-	// Sigmoid scoring function
-	return 1 / (1 + math.Exp(-scale*(threshold-latency)))
 }
 
 func (sw *ScoresWorker) Run() {
