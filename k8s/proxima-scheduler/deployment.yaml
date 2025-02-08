@@ -34,6 +34,8 @@ spec:
           value: "true"
         - name: SCORING_INTERVAL
           value: "30s"
+        - name: EDGE_PROXIES
+          value: "172.104.148.76,74.207.233.55"
         - name: INCLUDED_NAMESPACES
           value: "default"
         - name: INFLUXDB_ADDRESS
@@ -47,4 +49,3 @@ spec:
           value: "score_db"
       serviceAccountName: proxima-scheduler-sa
       restartPolicy: Always
-

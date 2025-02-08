@@ -200,7 +200,7 @@ func (p *Pinger) AggregateLatencies() {
 
 		for address, latency := range p.Latencies {
 			// Exclude all edge proxies
-			if p.IsEdgeProxy(address) {
+			if util.IsEdgeProxy(address, p.EdgeProxies) {
 				continue
 			}
 
@@ -216,15 +216,6 @@ func (p *Pinger) AggregateLatencies() {
 	}
 
 	p.SaveAggregatedLatenciesToDB()
-}
-
-func (p *Pinger) IsEdgeProxy(address string) bool {
-	for _, ep := range p.EdgeProxies {
-		if ep == address {
-			return true
-		}
-	}
-	return false
 }
 
 func (p *Pinger) SaveLatenciesToDB() {

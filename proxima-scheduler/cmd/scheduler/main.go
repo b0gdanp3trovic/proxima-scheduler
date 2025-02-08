@@ -36,7 +36,7 @@ func main() {
 	//schedulerWorker.Run()
 	//fmt.Println("Run scheduler.")
 
-	scoresWorker := scheduler.NewScoresWorker(clientset, influxDb, cfg.ScoringInterval)
+	scoresWorker := scheduler.NewScoresWorker(clientset, influxDb, cfg.ScoringInterval, cfg.EdgeProxies)
 	scoresWorker.Run()
 
 	fmt.Println("Run scores worker.")

@@ -17,9 +17,10 @@ type ScoresWorker struct {
 	EdgeWeightsInitialized bool
 	Db                     util.Database
 	ScoringInterval        time.Duration
+	EdgeProxies            []string
 }
 
-func NewScoresWorker(clientset *kubernetes.Clientset, db *util.InfluxDB, scoringInterval time.Duration) *ScoresWorker {
+func NewScoresWorker(clientset *kubernetes.Clientset, db *util.InfluxDB, scoringInterval time.Duration, edgeProxies []string) *ScoresWorker {
 	return &ScoresWorker{
 		Clientset:              clientset,
 		Scores:                 make(map[string]float64),
@@ -27,6 +28,7 @@ func NewScoresWorker(clientset *kubernetes.Clientset, db *util.InfluxDB, scoring
 		EdgeWeightsInitialized: false,
 		Db:                     db,
 		ScoringInterval:        scoringInterval,
+		EdgeProxies:            edgeProxies,
 	}
 }
 
@@ -70,6 +72,10 @@ func (sw *ScoresWorker) scoreNodes() {
 		edgeProxyWeight := sw.EdgeWeights[edgeProxy]
 
 		for nodeIP, latency := range latencies {
+			if util.IsEdgeProxy(nodeIP, sw.EdgeProxies) {
+				continue
+			}
+
 			if latency < Lmin {
 				Lmin = latency
 			}

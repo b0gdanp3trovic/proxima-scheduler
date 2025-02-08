@@ -140,3 +140,12 @@ func ObtainEdgeProxies(unfilteredEdgeproxies []string, clientset *kubernetes.Cli
 	}
 	return currentNodeIP, filteredEdgeProxies, nil
 }
+
+func IsEdgeProxy(address string, edgeProxies []string) bool {
+	for _, ep := range edgeProxies {
+		if ep == address {
+			return true
+		}
+	}
+	return false
+}
