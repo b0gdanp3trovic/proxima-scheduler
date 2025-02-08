@@ -73,7 +73,7 @@ func (sw *ScoresWorker) scoreNodes() {
 
 		for nodeIP, latency := range latencies {
 			if util.IsEdgeProxy(nodeIP, sw.EdgeProxies) {
-				log.Println("Found edge proxy %s. Skipping", nodeIP)
+				log.Printf("Found edge proxy %s. Skipping", nodeIP)
 				continue
 			}
 
