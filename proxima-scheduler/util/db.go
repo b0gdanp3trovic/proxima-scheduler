@@ -131,7 +131,7 @@ func (db *InfluxDB) GetAveragePingTime() (NodeLatencies, error) {
 		|> range(start: -30s)
 		|> filter(fn: (r) => r._measurement == "ping_times")
 		|> group(columns: ["node"])
-		|> mean(column: "latency_ms")
+		|> mean(column: "_value")
 	`, db.Bucket)
 
 	result, err := db.QueryAPI.Query(context.Background(), query)
@@ -169,7 +169,7 @@ func (db *InfluxDB) GetAveragePingTimeByEdges() (EdgeProxyToNodeLatencies, error
 		|> range(start: -60s)
 		|> filter(fn: (r) => r._measurement == "ping_times")
 		|> group(columns: ["node", "edge_proxy"])
-		|> mean(column: "latency_ms")
+		|> mean(column: "_value")
 	`, db.Bucket)
 
 	result, err := db.QueryAPI.Query(context.Background(), query)
@@ -218,7 +218,7 @@ func (db *InfluxDB) GetAverageLatenciesForEdge(edgeProxyAddress string) (NodeLat
 		|> filter(fn: (r) => r._measurement == "ping_times")
 		|> filter(fn: (r) => r.edge_proxy == "%s")
 		|> group(columns: ["node"])
-		|> mean(column: "latency_ms")
+		|> mean(column: "_value")
 	`, db.Bucket, edgeProxyAddress)
 
 	result, err := db.QueryAPI.Query(context.Background(), query)
