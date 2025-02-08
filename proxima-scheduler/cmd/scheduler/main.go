@@ -23,18 +23,18 @@ func main() {
 	influxClient := influxdb2.NewClient(cfg.InfluxDBAddress, cfg.InfluxDBToken)
 	influxDb := util.NewInfluxDB(influxClient, "proxima", "proxima")
 
-	schedulerWorker, err := scheduler.NewScheduler(cfg.SchedulerName, cfg.IncludedNamespaces, clientset, influxDb)
-
-	if err != nil {
-		log.Fatalf("Failed to create scheduler: %v", err)
-		os.Exit(1)
-	}
-
-	fmt.Println("Scheduler successfully configured.")
-
-	// Start the scheduler
-	schedulerWorker.Run()
-	fmt.Println("Run scheduler.")
+	//schedulerWorker, err := scheduler.NewScheduler(cfg.SchedulerName, cfg.IncludedNamespaces, clientset, influxDb)
+	//
+	//if err != nil {
+	//	log.Fatalf("Failed to create scheduler: %v", err)
+	//	os.Exit(1)
+	//}
+	//
+	//fmt.Println("Scheduler successfully configured.")
+	//
+	//// Start the scheduler
+	//schedulerWorker.Run()
+	//fmt.Println("Run scheduler.")
 
 	scoresWorker := scheduler.NewScoresWorker(clientset, influxDb, cfg.ScoringInterval)
 	scoresWorker.Run()
