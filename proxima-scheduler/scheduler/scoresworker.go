@@ -3,6 +3,7 @@ package scheduler
 import (
 	"fmt"
 	"log"
+	"math"
 	"time"
 
 	"github.com/b0gdanp3trovic/proxima-scheduler/util"
@@ -61,33 +62,37 @@ func (sw *ScoresWorker) scoreNodes() {
 		}
 	}
 
-	rawLatencies := make(map[string]float64)
-	maxLatency := 0.0
+	weightedLatencies := make(map[string]float64)
+	weightSums := make(map[string]float64)
+	Lmin, Lmax := math.MaxFloat64, 0.0
 
 	for edgeProxy, latencies := range nodeLatenciesByEdgeProxy {
 		edgeProxyWeight := sw.EdgeWeights[edgeProxy]
 
 		for nodeIP, latency := range latencies {
-			if latency > maxLatency {
-				maxLatency = latency
+			if latency < Lmin {
+				Lmin = latency
 			}
 
-			if _, exists := rawLatencies[nodeIP]; !exists {
-				rawLatencies[nodeIP] = edgeProxyWeight * latency
-			} else {
-				rawLatencies[nodeIP] = (rawLatencies[nodeIP] + edgeProxyWeight*latency) / 2
+			if latency > Lmax {
+				Lmax = latency
 			}
+
+			weightedLatencies[nodeIP] += edgeProxyWeight * latency
+			weightSums[nodeIP] += edgeProxyWeight
 		}
 	}
 
-	if maxLatency == 0 {
-		log.Println("Max latency is zero, skipping scoring to avoid division by zero.")
+	if Lmax == Lmin {
+		log.Println("No variance, skipping.")
 		return
 	}
 
-	for nodeIP, latency := range rawLatencies {
-		sw.Scores[nodeIP] = 1 - (latency / maxLatency)
-		log.Printf("Node %s - Latency: %.2f ms, Score: %.4f\n", nodeIP, latency, sw.Scores[nodeIP])
+	for nodeIP, weightedLatency := range weightedLatencies {
+		finalLatency := weightedLatency / weightSums[nodeIP]
+
+		sw.Scores[nodeIP] = 1 - (finalLatency-Lmin)/(Lmax-Lmin)
+		log.Printf("Node %s - Latency: %.2f ms, Score: %.4f\n", nodeIP, finalLatency, sw.Scores[nodeIP])
 	}
 
 	err = sw.Db.SaveNodeScores(sw.Scores)
@@ -95,7 +100,7 @@ func (sw *ScoresWorker) scoreNodes() {
 		log.Printf("Error saving node scores: %v\n", err)
 	}
 
-	log.Printf("Saved node scores.")
+	log.Println("Saved node scores.")
 }
 
 func (sw *ScoresWorker) Run() {
