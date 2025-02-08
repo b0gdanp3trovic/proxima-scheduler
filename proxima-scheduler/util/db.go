@@ -166,7 +166,7 @@ func (db *InfluxDB) GetAveragePingTime() (NodeLatencies, error) {
 func (db *InfluxDB) GetAveragePingTimeByEdges() (EdgeProxyToNodeLatencies, error) {
 	query := fmt.Sprintf(`
 		from(bucket: "%s")
-		|> range(start: -60s)
+		|> range(start: -2m)
 		|> filter(fn: (r) => r._measurement == "ping_times")
 		|> group(columns: ["node", "edge_proxy"])
 		|> mean(column: "_value")
