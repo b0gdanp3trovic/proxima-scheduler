@@ -24,6 +24,7 @@ type Config struct {
 	ClusterName        string
 	ConsulCertPath     string
 	EdgeProxies        []string
+	KubeConfigsPath    string
 }
 
 func LoadConfig() *Config {
@@ -42,6 +43,7 @@ func LoadConfig() *Config {
 	consulCertPath := getEnv("CONSUL_CERT_PATH", "")
 	influxDBToken := getEnv("INFLUXDB_TOKEN", "")
 	edgeProxies := parseCommaSeparatedArray("EDGE_PROXIES", []string{"default"})
+	kubeConfigsPath := getEnv("KUBECONFIGS_PATH", "/etc/kubeconfigs")
 
 	return &Config{
 		InfluxDBAddress:    influxDBAddress,
@@ -59,6 +61,7 @@ func LoadConfig() *Config {
 		ClusterName:        clusterName,
 		ConsulCertPath:     consulCertPath,
 		EdgeProxies:        edgeProxies,
+		KubeConfigsPath:    kubeConfigsPath,
 	}
 }
 

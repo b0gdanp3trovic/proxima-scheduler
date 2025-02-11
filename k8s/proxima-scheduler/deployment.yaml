@@ -45,6 +45,9 @@ spec:
             secretKeyRef:
               name: influxdb-auth-token
               key: INFLUXDB_TOKEN
+        - name: kubeconfigs
+          secret:
+            secretName: kubeconfigs              
         - name: INFLUXDB_DB_SCORING
           value: "score_db"
       serviceAccountName: proxima-scheduler-sa

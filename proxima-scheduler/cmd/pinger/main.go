@@ -12,7 +12,7 @@ import (
 func main() {
 	cfg := util.LoadConfig()
 
-	clientset, err := util.GetClientset()
+	clientset, err := util.GetInClusterClientset()
 
 	if err != nil {
 		log.Fatalf("Failed to obtain clientset: %v", err)

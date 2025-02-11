@@ -13,30 +13,31 @@ import (
 func main() {
 	cfg := util.LoadConfig()
 
-	clientset, err := util.GetClientset()
-
+	inClusterClientset, err := util.GetInClusterClientset()
 	if err != nil {
 		log.Fatalf("Failed to obtain clientset: %v", err)
 		os.Exit(1)
 	}
 
+	kubeconfigs, err := util.LoadKubeconfigs(cfg.KubeConfigsPath)
+
 	influxClient := influxdb2.NewClient(cfg.InfluxDBAddress, cfg.InfluxDBToken)
 	influxDb := util.NewInfluxDB(influxClient, "proxima", "proxima")
 
-	//schedulerWorker, err := scheduler.NewScheduler(cfg.SchedulerName, cfg.IncludedNamespaces, clientset, influxDb)
-	//
-	//if err != nil {
-	//	log.Fatalf("Failed to create scheduler: %v", err)
-	//	os.Exit(1)
-	//}
-	//
-	//fmt.Println("Scheduler successfully configured.")
-	//
-	//// Start the scheduler
-	//schedulerWorker.Run()
-	//fmt.Println("Run scheduler.")
+	schedulerWorker, err := scheduler.NewScheduler(cfg.SchedulerName, cfg.IncludedNamespaces, inClusterClientset, kubeconfigs, influxDb)
 
-	scoresWorker := scheduler.NewScoresWorker(clientset, influxDb, cfg.ScoringInterval, cfg.EdgeProxies)
+	if err != nil {
+		log.Fatalf("Failed to create scheduler: %v", err)
+		os.Exit(1)
+	}
+
+	fmt.Println("Scheduler successfully configured.")
+
+	// Start the scheduler
+	schedulerWorker.Run()
+	fmt.Println("Run scheduler.")
+
+	scoresWorker := scheduler.NewScoresWorker(inClusterClientset, influxDb, cfg.ScoringInterval, cfg.EdgeProxies)
 	scoresWorker.Run()
 
 	fmt.Println("Run scores worker.")

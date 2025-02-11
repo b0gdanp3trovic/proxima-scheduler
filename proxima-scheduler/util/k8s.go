@@ -4,7 +4,9 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"os"
 	"path/filepath"
+	"strings"
 
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -13,7 +15,7 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 )
 
-func GetClientset() (*kubernetes.Clientset, error) {
+func GetInClusterClientset() (*kubernetes.Clientset, error) {
 	config, err := rest.InClusterConfig()
 	if err == nil {
 		clientset, err := kubernetes.NewForConfig(config)
@@ -148,4 +150,42 @@ func IsEdgeProxy(address string, edgeProxies []string) bool {
 		}
 	}
 	return false
+}
+
+func LoadKubeconfigs(dir string) (map[string]string, error) {
+	files, err := os.ReadDir(dir)
+	if err != nil {
+		return nil, err
+	}
+
+	kubeconfigs := make(map[string]string)
+	for _, file := range files {
+		if file.IsDir() {
+			continue
+		}
+
+		kubeconfigPath := filepath.Join(dir, file.Name())
+
+		fileName := file.Name()
+		ext := filepath.Ext(fileName)
+		nameWithoutExt := strings.TrimSuffix(fileName, ext)
+
+		kubeconfigs[nameWithoutExt] = kubeconfigPath
+	}
+
+	return kubeconfigs, nil
+}
+
+func GetClientsetForCluster(kubeconfigPath string) (*kubernetes.Clientset, error) {
+	config, err := clientcmd.BuildConfigFromFlags("", kubeconfigPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load kubeconfig %s: %w", kubeconfigPath, err)
+	}
+
+	clientset, err := kubernetes.NewForConfig(config)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create Kubernetes clientset: %w", err)
+	}
+
+	return clientset, nil
 }
