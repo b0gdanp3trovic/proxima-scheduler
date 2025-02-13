@@ -48,6 +48,7 @@ func NewScheduler(schedulerName string, includedNamespaces []string, inClusterCl
 }
 
 func (s *Scheduler) Run() {
+	fmt.Printf("Clientsets: %v", s.Clientsets)
 	for clusterName, clientset := range s.Clientsets {
 		for _, ns := range s.IncludedNamespaces {
 			go func(clusterName, namespace string, clientset *kubernetes.Clientset) {
