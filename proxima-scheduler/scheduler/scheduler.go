@@ -27,7 +27,7 @@ func NewScheduler(schedulerName string, includedNamespaces []string, inClusterCl
 		clientset, err := util.GetClientsetForCluster(kubeconfigPath)
 		if err != nil {
 			fmt.Printf("Failed to load cluster %s: %v\n", clusterName, err)
-			continue
+			return nil, err
 		}
 		clientsets[clusterName] = clientset
 	}

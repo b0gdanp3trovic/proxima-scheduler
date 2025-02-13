@@ -45,10 +45,16 @@ spec:
             secretKeyRef:
               name: influxdb-auth-token
               key: INFLUXDB_TOKEN
-        - name: kubeconfigs
-          secret:
-            secretName: kubeconfigs              
         - name: INFLUXDB_DB_SCORING
           value: "score_db"
+        volumeMounts:
+        - name: kubeconfigs-volume
+          mountPath: /etc/kubeconfigs
+          readOnly: true
       serviceAccountName: proxima-scheduler-sa
       restartPolicy: Always
+      volumes:
+      - name: kubeconfigs-volume
+        secret:
+          secretName: kubeconfigs
+
