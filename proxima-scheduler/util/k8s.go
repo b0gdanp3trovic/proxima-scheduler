@@ -3,7 +3,6 @@ package util
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"os"
 	"path/filepath"
@@ -177,18 +176,7 @@ func LoadKubeconfigs(dir string) (map[string]string, error) {
 	return kubeconfigs, nil
 }
 
-func GetClientsetForCluster(kubeconfigDir string) (*kubernetes.Clientset, error) {
-	files, err := ioutil.ReadDir(kubeconfigDir)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read directory %s: %w", kubeconfigDir, err)
-	}
-
-	if len(files) == 0 {
-		return nil, fmt.Errorf("no kubeconfig files found in directory %s", kubeconfigDir)
-	}
-
-	kubeconfigPath := filepath.Join(kubeconfigDir, files[0].Name())
-
+func GetClientsetForCluster(kubeconfigPath string) (*kubernetes.Clientset, error) {
 	config, err := clientcmd.BuildConfigFromFlags("", kubeconfigPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load kubeconfig %s: %w", kubeconfigPath, err)
