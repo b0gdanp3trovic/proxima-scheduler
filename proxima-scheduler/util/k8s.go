@@ -160,7 +160,7 @@ func LoadKubeconfigs(dir string) (map[string]string, error) {
 
 	kubeconfigs := make(map[string]string)
 	for _, file := range files {
-		if file.IsDir() {
+		if file.IsDir() || file.Name() == "..data" {
 			continue
 		}
 
