@@ -20,6 +20,7 @@ type Database interface {
 	GetAverageLatenciesForEdge(edgeProxyAddress string) (NodeLatencies, error)
 	SaveEdgeProxyMetricsForService(serviceName string, podURL string, edgeProxyIP string, avgLatency time.Duration, avgRPM float64) error
 	GetNodeScores() (NodeScores, error)
+	GetNodeScore(nodeIP string) (float64, error)
 	SaveRequestLatency(podURL string, nodeIP string, edgeproxyNodeIP string, latency time.Duration) error
 	SaveNodeScores(scores map[string]float64) error
 	GetLatency(source, destination string) (time.Duration, error)
@@ -253,7 +254,7 @@ func (db *InfluxDB) GetAverageLatenciesForEdge(edgeProxyAddress string) (NodeLat
 func (db *InfluxDB) GetNodeScores() (NodeScores, error) {
 	query := fmt.Sprintf(`
 		from(bucket: "%s")
-		|> range(start: -60m) // Adjust the time range as needed
+		|> range(start: -60m)
 		|> filter(fn: (r) => r._measurement == "node_scores")
 		|> group(columns: ["node"])
 		|> last(column: "_value")
@@ -286,6 +287,44 @@ func (db *InfluxDB) GetNodeScores() (NodeScores, error) {
 	}
 
 	return scores, nil
+}
+
+func (db *InfluxDB) GetNodeScore(nodeIP string) (float64, error) {
+	query := fmt.Sprintf(`
+		from(bucket: "%s")
+		|> range(start: -60m)
+		|> filter(fn: (r) => r._measurement == "node_scores" and r.node == "%s")
+		|> last(column: "_value")
+	`, db.Bucket, nodeIP)
+
+	result, err := db.QueryAPI.Query(context.Background(), query)
+	if err != nil {
+		return 0, fmt.Errorf("failed to query node score for node '%s': %w", nodeIP, err)
+	}
+
+	var score float64
+	found := false
+
+	for result.Next() {
+		val, ok := result.Record().Value().(float64)
+		if !ok {
+			log.Printf("Failed to parse score in record: %+v", result.Record())
+			continue
+		}
+		score = val
+		found = true
+		break
+	}
+
+	if result.Err() != nil {
+		return 0, fmt.Errorf("query result error for node '%s': %w", nodeIP, result.Err())
+	}
+
+	if !found {
+		return 0, fmt.Errorf("no score found for node '%s' in the time range", nodeIP)
+	}
+
+	return score, nil
 }
 
 func (db *InfluxDB) SaveNodeScores(scores map[string]float64) error {

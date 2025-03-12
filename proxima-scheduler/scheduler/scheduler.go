@@ -3,6 +3,7 @@ package scheduler
 import (
 	"context"
 	"fmt"
+	"math"
 
 	"github.com/b0gdanp3trovic/proxima-scheduler/util"
 	v1 "k8s.io/api/core/v1"
@@ -12,12 +13,15 @@ import (
 	"k8s.io/client-go/tools/cache"
 )
 
+type DesiredStateResult map[string]map[string]string
+
 type Scheduler struct {
 	Clientsets         map[string]*kubernetes.Clientset
 	SchedulerName      string
 	IncludedNamespaces []string
 	StopCh             chan struct{}
 	DB                 util.Database
+	ScheduledPods      map[string]map[string]string
 }
 
 func NewScheduler(schedulerName string, includedNamespaces []string, inClusterClientset *kubernetes.Clientset, kubeconfigs map[string]string, db util.Database) (*Scheduler, error) {
@@ -70,7 +74,7 @@ func (s *Scheduler) Run() {
 							pod := obj.(*v1.Pod)
 							if pod.Spec.SchedulerName == s.SchedulerName && pod.Spec.NodeName == "" {
 								fmt.Printf("New pod detected in cluster %s, scheduling...\n", clusterName)
-								s.schedulePod(pod, clientset)
+								s.schedulePod(pod)
 							}
 						},
 					},
@@ -82,36 +86,31 @@ func (s *Scheduler) Run() {
 	}
 }
 
-func (s *Scheduler) schedulePod(pod *v1.Pod, clientset *kubernetes.Clientset) {
-	nodes, err := util.DiscoverNodes(clientset)
+func (s *Scheduler) schedulePod(pod *v1.Pod) {
+	nodeScores, err := s.GetNodeScores()
+	if err != nil {
+		fmt.Printf("Error obtaining node scores: %v\n", err)
+	}
 
 	if err != nil {
 		fmt.Printf("Error listing nodes: %v\n", err)
 		return
 	}
 
-	if len(nodes.Items) == 0 {
-		fmt.Println("No nodes available")
-		return
-	}
-
-	// TODO: enable config option for the logic behind selecting nodes
-	// selectedNode := selectNodeBasedOnCapacity(clientset, nodes, pod)
-	// selectedNode := selectNodeBasedOnScore(clientset, nodes, pod, s.DB)
-	selectedNode, err := selectNodeBasedOnScore(clientset, nodes, pod, s.DB)
+	nodeName, clusterName, err := getNodeIPForSchedule(nodeScores, *pod)
 
 	if err != nil {
 		fmt.Printf("Error selecting node for pod %s: %v\n", pod.GetName(), err)
 	}
 
-	if selectedNode != nil {
-		fmt.Printf("Scheduling pod %s to node %s\n", pod.GetName(), *selectedNode)
+	if nodeName != "" {
+		fmt.Printf("Scheduling pod %s to node %s\n", pod.GetName(), nodeName)
 		// Bind the pod to the selected node
-		s.bindPodToNode(clientset, pod, selectedNode)
+		s.bindPodToNode(s.Clientsets[clusterName], pod, nodeName)
 	}
 }
 
-func (s *Scheduler) bindPodToNode(clientset *kubernetes.Clientset, pod *v1.Pod, nodeName *string) {
+func (s *Scheduler) bindPodToNode(clientset *kubernetes.Clientset, pod *v1.Pod, nodeName string) {
 	binding := &v1.Binding{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: pod.Namespace,
@@ -120,7 +119,7 @@ func (s *Scheduler) bindPodToNode(clientset *kubernetes.Clientset, pod *v1.Pod, 
 		},
 		Target: v1.ObjectReference{
 			Kind: "Node",
-			Name: *nodeName,
+			Name: nodeName,
 		},
 	}
 
@@ -130,5 +129,58 @@ func (s *Scheduler) bindPodToNode(clientset *kubernetes.Clientset, pod *v1.Pod, 
 		return
 	}
 
-	fmt.Printf("Successfully scheduled pod %s to node %s.\n", pod.GetName(), *nodeName)
+	fmt.Printf("Successfully scheduled pod %s to node %s.\n", pod.GetName(), nodeName)
+}
+
+func (s *Scheduler) GetNodeScores() (map[string]map[string]float64, error) {
+	nodeScores := make(map[string]map[string]float64)
+
+	for clusterName, clientset := range s.Clientsets {
+		nodeList, err := util.DiscoverNodes(clientset)
+		if err != nil {
+			return nil, fmt.Errorf("failed to list nodes in cluster %s: %w", clusterName, err)
+		}
+
+		nodeScores[clusterName] = make(map[string]float64)
+
+		for _, node := range nodeList.Items {
+			var nodeIP string
+
+			for _, addr := range node.Status.Addresses {
+				if addr.Type == v1.NodeInternalIP {
+					nodeIP = addr.Address
+				}
+			}
+
+			nodeScores[clusterName][nodeIP], err = s.DB.GetNodeScore(nodeIP)
+			if err != nil {
+				return nil, fmt.Errorf("failed to obtain node score for node %s: %w", nodeIP, err)
+			}
+		}
+	}
+
+	return nodeScores, nil
+}
+
+func getNodeIPForSchedule(nodeScores map[string]map[string]float64, pod v1.Pod) (string, string, error) {
+	// Based on score only
+	bestFreeNode := ""
+	bestFreeNodeCluster := ""
+	bestScore := -math.MaxFloat64
+
+	for clusterName, nodes := range nodeScores {
+		for nodeIP, score := range nodes {
+			if score > bestScore {
+				bestScore = score
+				bestFreeNode = nodeIP
+				bestFreeNodeCluster = clusterName
+			}
+		}
+	}
+
+	if bestFreeNode == "" {
+		return "", "", fmt.Errorf("no suitable node found for scheduling pod %s", pod.Name)
+	}
+
+	return bestFreeNode, bestFreeNodeCluster, nil
 }
