@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"log"
 	"os"
 
@@ -31,16 +30,16 @@ func main() {
 		os.Exit(1)
 	}
 
-	fmt.Println("Scheduler successfully configured.")
+	log.Println("Scheduler successfully configured.")
 
 	// Start the scheduler
 	schedulerWorker.Run()
-	fmt.Println("Run scheduler.")
+	log.Println("Run scheduler.")
 
 	scoresWorker := scheduler.NewScoresWorker(inClusterClientset, influxDb, cfg.ScoringInterval, cfg.EdgeProxies)
 	scoresWorker.Run()
 
-	fmt.Println("Run scores worker.")
+	log.Println("Run scores worker.")
 
 	// Block the function from exiting
 	select {}

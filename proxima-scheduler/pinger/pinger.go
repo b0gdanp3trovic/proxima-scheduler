@@ -79,7 +79,7 @@ func (p *Pinger) RemoveAddress(address string) {
 func (p *Pinger) updateAddresses() {
 	nodes, err := util.DiscoverNodes(p.Clientset)
 	if err != nil {
-		fmt.Printf("Error discovering nodes: %v\n", err)
+		log.Printf("Error discovering nodes: %v\n", err)
 		return
 	}
 
@@ -95,7 +95,7 @@ func (p *Pinger) updateAddresses() {
 		}
 
 		if address == "" {
-			fmt.Printf("No Internal IP found for node %s\n", node.Name)
+			log.Printf("No Internal IP found for node %s\n", node.Name)
 			continue
 		}
 
@@ -105,7 +105,7 @@ func (p *Pinger) updateAddresses() {
 		   core or non-edge nodes.
 		*/
 		if address == p.NodeIP {
-			fmt.Printf("Skipping node %s, as it is detected as a host node.\n", p.NodeIP)
+			log.Printf("Skipping node %s, as it is detected as a host node.\n", p.NodeIP)
 			continue
 		}
 
@@ -113,14 +113,14 @@ func (p *Pinger) updateAddresses() {
 
 		if _, exists := p.Addr[address]; !exists {
 			p.AddAddress(address)
-			fmt.Printf("Discovered and added node: %s\n", address)
+			log.Printf("Discovered and added node: %s\n", address)
 		}
 	}
 
 	for address := range p.Addr {
 		if _, exists := currentNodes[address]; !exists {
 			p.RemoveAddress(address)
-			fmt.Printf("Node removed: %s\n", address)
+			log.Printf("Node removed: %s\n", address)
 		}
 
 		p.mu.Lock()
@@ -142,9 +142,9 @@ func (p *Pinger) PingAll() {
 	}
 
 	// Also add edge proxies
-	fmt.Println("Edge proxy addresses:")
+	log.Println("Edge proxy addresses:")
 	for _, edgeProxyAddress := range p.EdgeProxies {
-		fmt.Printf(" - %s\n", edgeProxyAddress)
+		log.Printf(" - %s\n", edgeProxyAddress)
 		addresses = append(addresses, edgeProxyAddress)
 	}
 
@@ -158,7 +158,7 @@ func (p *Pinger) PingAll() {
 		pinger.SetPrivileged(true)
 
 		if err != nil {
-			fmt.Printf("Failed to create pinger for %s: %v\n", address, err)
+			log.Printf("Failed to create pinger for %s: %v\n", address, err)
 			continue
 		}
 
@@ -167,7 +167,7 @@ func (p *Pinger) PingAll() {
 
 		err = pinger.Run()
 		if err != nil {
-			fmt.Printf("Failed to ping %s: %v\n", address, err)
+			log.Printf("Failed to ping %s: %v\n", address, err)
 			continue
 		}
 
@@ -176,9 +176,9 @@ func (p *Pinger) PingAll() {
 		p.mu.Lock()
 		if stats.PacketsRecv > 0 {
 			p.Latencies[address] = stats.AvgRtt
-			fmt.Printf("Ping to %s: %v\n", address, stats.AvgRtt)
+			log.Printf("Ping to %s: %v\n", address, stats.AvgRtt)
 		} else {
-			fmt.Printf("Ping to %s failed: No packets received\n", address)
+			log.Printf("Ping to %s failed: No packets received\n", address)
 		}
 		p.mu.Unlock()
 	}
@@ -194,7 +194,7 @@ func (p *Pinger) AggregateLatencies() {
 		latencyToCurrent, err := p.DB.GetLatency(ep, p.ExternalNodeIP)
 
 		if err != nil {
-			fmt.Printf("Failed to get latency from %s to %s: %v\n", ep, p.ExternalNodeIP, err)
+			log.Printf("Failed to get latency from %s to %s: %v\n", ep, p.ExternalNodeIP, err)
 			continue
 		}
 
@@ -210,9 +210,9 @@ func (p *Pinger) AggregateLatencies() {
 		}
 	}
 
-	fmt.Println("Aggregated Latencies:")
+	log.Println("Aggregated Latencies:")
 	for key, latency := range p.AggregatedLatencies {
-		fmt.Printf("Source: %s -> Destination: %s, Latency: %v\n", key.Source, key.Destination, latency)
+		log.Printf("Source: %s -> Destination: %s, Latency: %v\n", key.Source, key.Destination, latency)
 	}
 
 	p.SaveAggregatedLatenciesToDB()
@@ -234,7 +234,7 @@ func (p *Pinger) SaveLatenciesToDB() {
 	if err := p.DB.SavePingTime(p.Latencies, p.ExternalNodeIP); err != nil {
 		log.Printf("Failed to save latencies to the database: %v", err)
 	} else {
-		fmt.Println("Successfully saved latencies to the database.")
+		log.Println("Successfully saved latencies to the database.")
 	}
 }
 
@@ -255,7 +255,7 @@ func (p *Pinger) SaveAggregatedLatenciesToDB() {
 func (p *Pinger) Run() {
 	go func() {
 		p.updateAddresses()
-		fmt.Println("Initial node discovery completed.")
+		log.Println("Initial node discovery completed.")
 
 		ticker := time.NewTicker(p.Interval)
 		defer ticker.Stop()
@@ -264,14 +264,14 @@ func (p *Pinger) Run() {
 			select {
 			case <-ticker.C:
 				p.updateAddresses()
-				fmt.Println("Finished updating addresses.")
+				log.Println("Finished updating addresses.")
 				p.PingAll()
-				fmt.Println("Finished pinging all addresses.")
+				log.Println("Finished pinging all addresses.")
 				p.AggregateLatencies()
-				fmt.Println("Finished aggregating latencies.")
+				log.Println("Finished aggregating latencies.")
 
 			case <-p.stopChan:
-				fmt.Println("Stopping pinger.")
+				log.Println("Stopping pinger.")
 				// Save any remaining latencies before stopping
 				if p.DBEnabled {
 					p.SaveLatenciesToDB()

@@ -3,6 +3,7 @@ package scheduler
 import (
 	"context"
 	"fmt"
+	"log"
 	"math"
 
 	"github.com/b0gdanp3trovic/proxima-scheduler/util"
@@ -30,7 +31,7 @@ func NewScheduler(schedulerName string, includedNamespaces []string, inClusterCl
 	for clusterName, kubeconfigPath := range kubeconfigs {
 		clientset, err := util.GetClientsetForCluster(kubeconfigPath)
 		if err != nil {
-			fmt.Printf("Failed to load cluster %s: %v\n", clusterName, err)
+			log.Printf("Failed to load cluster %s: %v\n", clusterName, err)
 			return nil, err
 		}
 		clientsets[clusterName] = clientset
@@ -52,11 +53,11 @@ func NewScheduler(schedulerName string, includedNamespaces []string, inClusterCl
 }
 
 func (s *Scheduler) Run() {
-	fmt.Printf("Clientsets: %v", s.Clientsets)
+	log.Printf("Clientsets: %v", s.Clientsets)
 	for clusterName, clientset := range s.Clientsets {
 		for _, ns := range s.IncludedNamespaces {
 			go func(clusterName, namespace string, clientset *kubernetes.Clientset) {
-				fmt.Printf("Watching pods in namespace %s on cluster %s\n", namespace, clusterName)
+				log.Printf("Watching pods in namespace %s on cluster %s\n", namespace, clusterName)
 
 				podListWatcher := cache.NewListWatchFromClient(
 					clientset.CoreV1().RESTClient(),
@@ -73,7 +74,7 @@ func (s *Scheduler) Run() {
 						AddFunc: func(obj interface{}) {
 							pod := obj.(*v1.Pod)
 							if pod.Spec.SchedulerName == s.SchedulerName && pod.Spec.NodeName == "" {
-								fmt.Printf("New pod detected in cluster %s, scheduling...\n", clusterName)
+								log.Printf("New pod detected in cluster %s, scheduling...\n", clusterName)
 								s.schedulePod(pod)
 							}
 						},
@@ -89,22 +90,22 @@ func (s *Scheduler) Run() {
 func (s *Scheduler) schedulePod(pod *v1.Pod) {
 	nodeScores, err := s.GetNodeScores()
 	if err != nil {
-		fmt.Printf("Error obtaining node scores: %v\n", err)
+		log.Printf("Error obtaining node scores: %v\n", err)
 	}
 
 	if err != nil {
-		fmt.Printf("Error listing nodes: %v\n", err)
+		log.Printf("Error listing nodes: %v\n", err)
 		return
 	}
 
 	targetNodeIP, clusterName, err := s.GetNodeIPForSchedule(nodeScores, pod)
 
 	if err != nil {
-		fmt.Printf("Error selecting node for pod %s: %v\n", pod.GetName(), err)
+		log.Printf("Error selecting node for pod %s: %v\n", pod.GetName(), err)
 	}
 
 	if targetNodeIP != "" {
-		fmt.Printf("Scheduling pod %s to node %s\n", pod.GetName(), targetNodeIP)
+		log.Printf("Scheduling pod %s to node %s\n", pod.GetName(), targetNodeIP)
 		// Bind the pod to the selected node
 		s.bindPodToNode(s.Clientsets[clusterName], pod, targetNodeIP)
 	}
@@ -125,11 +126,11 @@ func (s *Scheduler) bindPodToNode(clientset *kubernetes.Clientset, pod *v1.Pod, 
 
 	err := clientset.CoreV1().Pods(pod.Namespace).Bind(context.TODO(), binding, metav1.CreateOptions{})
 	if err != nil {
-		fmt.Printf("Error binding pod: %v\n", err)
+		log.Printf("Error binding pod: %v\n", err)
 		return
 	}
 
-	fmt.Printf("Successfully scheduled pod %s to node %s.\n", pod.GetName(), nodeName)
+	log.Printf("Successfully scheduled pod %s to node %s.\n", pod.GetName(), nodeName)
 }
 
 func (s *Scheduler) GetNodeScores() (map[string]map[string]float64, error) {

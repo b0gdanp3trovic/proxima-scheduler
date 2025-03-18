@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 
 	admissionv1 "k8s.io/api/admission/v1"
@@ -57,7 +58,7 @@ func (h *AdmissionHandler) MutationHandler(w http.ResponseWriter, r *http.Reques
 	}
 
 	if value, ok := pod.Annotations["consul-register"]; ok && value == "true" {
-		fmt.Printf("Adding consul-register init container to pod %s\n", pod.Name)
+		log.Printf("Adding consul-register init container to pod %s\n", pod.Name)
 
 		patchBytes, err := createInitContainerPatch(h.consulURL)
 		if err != nil {
@@ -75,7 +76,7 @@ func (h *AdmissionHandler) MutationHandler(w http.ResponseWriter, r *http.Reques
 			}(),
 		}
 	} else {
-		fmt.Printf("Allowing pod %s without modification", pod.Name)
+		log.Printf("Allowing pod %s without modification", pod.Name)
 		admissionReviewResp.Response = &admissionv1.AdmissionResponse{
 			UID:     admissionReviewReq.Request.UID,
 			Allowed: true,
@@ -90,7 +91,7 @@ func (h *AdmissionHandler) MutationHandler(w http.ResponseWriter, r *http.Reques
 		http.Error(w, fmt.Sprintf("could not marshal response: %v", err), http.StatusInternalServerError)
 		return
 	}
-	fmt.Println("Finished processing admission request.")
+	log.Println("Finished processing admission request.")
 	w.Header().Set("Content-Type", "application/json")
 	w.Write(respBytes)
 }
@@ -153,11 +154,11 @@ func (h *AdmissionHandler) Start() {
 	go func() {
 		http.HandleFunc("/mutate", h.MutationHandler)
 
-		fmt.Println("Starting webhook server on port 8080 with TLS...")
+		log.Println("Starting webhook server on port 8080 with TLS...")
 		err := http.ListenAndServeTLS(":8080", h.crtPath, h.keyPath, nil)
 
 		if err != nil {
-			fmt.Printf("Error starting TLS server: %v\n", err)
+			log.Printf("Error starting TLS server: %v\n", err)
 		}
 	}()
 }

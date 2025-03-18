@@ -2,6 +2,7 @@ package scheduler
 
 import (
 	"fmt"
+	"log"
 	"math"
 
 	"github.com/b0gdanp3trovic/proxima-scheduler/util"
@@ -15,13 +16,13 @@ func selectNodeBasedOnCapacity(clientset *kubernetes.Clientset, nodes *v1.NodeLi
 		nodeAddress := node.Status.Addresses[0].Address
 		if hasEnoughCapacity(clientset, nodeAddress, pod) {
 			selectedNode := node.Name
-			fmt.Printf("Selected node %s\n", selectedNode)
+			log.Printf("Selected node %s\n", selectedNode)
 			// Bind the pod to the selected node
 			return &selectedNode
 		}
 	}
 
-	fmt.Println("No suitable nodes available")
+	log.Println("No suitable nodes available")
 	return nil
 }
 
@@ -39,12 +40,12 @@ func selectNodeBasedOnLatency(clientset *kubernetes.Clientset, nodes *v1.NodeLis
 
 		latency, exists := nodeLatencies[nodeAddress]
 		if !exists {
-			fmt.Printf("Node %s does not have latency data, proceeding...\n", nodeAddress)
+			log.Printf("Node %s does not have latency data, proceeding...\n", nodeAddress)
 			continue
 		}
 
 		if !hasEnoughCapacity(clientset, nodeAddress, pod) {
-			fmt.Printf("Node %s does not have enough capacity, proceeding...\n", nodeAddress)
+			log.Printf("Node %s does not have enough capacity, proceeding...\n", nodeAddress)
 			continue
 		}
 
@@ -65,7 +66,7 @@ func hasEnoughCapacity(clientset *kubernetes.Clientset, nodeIP string, pod *v1.P
 	node, err := util.GetNodeByInternalIP(clientset, nodeIP)
 
 	if err != nil {
-		fmt.Printf("Error checking capacity for node %s: %v", nodeIP, err)
+		log.Printf("Error checking capacity for node %s: %v", nodeIP, err)
 		return false
 	}
 

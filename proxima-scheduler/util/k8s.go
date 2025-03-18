@@ -22,11 +22,11 @@ func GetInClusterClientset() (*kubernetes.Clientset, error) {
 		if err != nil {
 			return nil, fmt.Errorf("failed to create clientset using in-cluster config: %w", err)
 		}
-		fmt.Println("Detected running inside the Kubernetes cluster")
+		log.Println("Detected running inside the Kubernetes cluster")
 		return clientset, nil
 	}
 
-	fmt.Println("Detected running outside the Kubernetes cluster, trying to load kubeconfig")
+	log.Println("Detected running outside the Kubernetes cluster, trying to load kubeconfig")
 	home := HomeDir()
 	if home == "" {
 		return nil, fmt.Errorf("home directory not found")
@@ -43,7 +43,7 @@ func GetInClusterClientset() (*kubernetes.Clientset, error) {
 		return nil, fmt.Errorf("failed to create clientset using kubeconfig: %w", err)
 	}
 
-	fmt.Println("Connection to cluster successfully configured using kubeconfig")
+	log.Println("Connection to cluster successfully configured using kubeconfig")
 	return clientset, nil
 }
 
@@ -88,7 +88,7 @@ func DiscoverEdgeNodesByDaemonset(clientset *kubernetes.Clientset, namespace str
 		}
 	}
 
-	fmt.Printf("Discovered %d edge nodes based on DaemonSet %s\n", len(edges), daemonsetName)
+	log.Printf("Discovered %d edge nodes based on DaemonSet %s\n", len(edges), daemonsetName)
 	return edges, nil
 }
 
@@ -131,7 +131,7 @@ func ObtainEdgeProxies(unfilteredEdgeproxies []string, clientset *kubernetes.Cli
 	var filteredEdgeProxies []string
 	currentNodeIP, err := getNodeExternalIP(clientset, nodeIP)
 	if err != nil {
-		fmt.Printf("Error obtaining current node IP: %v\n", err)
+		log.Printf("Error obtaining current node IP: %v\n", err)
 		return "", nil, err
 	}
 
