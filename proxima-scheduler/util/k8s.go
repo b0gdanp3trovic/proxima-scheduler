@@ -189,3 +189,20 @@ func GetClientsetForCluster(kubeconfigPath string) (*kubernetes.Clientset, error
 
 	return clientset, nil
 }
+
+func GetNodeByInternalIP(clientset *kubernetes.Clientset, internalIP string) (*v1.Node, error) {
+	nodes, err := DiscoverNodes(clientset)
+	if err != nil {
+		return nil, fmt.Errorf("failed to discover nodes: %w", err)
+	}
+
+	for _, node := range nodes.Items {
+		for _, addr := range node.Status.Addresses {
+			if addr.Type == v1.NodeInternalIP && addr.Address == internalIP {
+				return &node, nil
+			}
+		}
+	}
+
+	return nil, fmt.Errorf("node with internal IP %s not found", internalIP)
+}

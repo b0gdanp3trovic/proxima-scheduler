@@ -97,16 +97,16 @@ func (s *Scheduler) schedulePod(pod *v1.Pod) {
 		return
 	}
 
-	nodeName, clusterName, err := getNodeIPForSchedule(nodeScores, *pod)
+	targetNodeIP, clusterName, err := s.GetNodeIPForSchedule(nodeScores, pod)
 
 	if err != nil {
 		fmt.Printf("Error selecting node for pod %s: %v\n", pod.GetName(), err)
 	}
 
-	if nodeName != "" {
-		fmt.Printf("Scheduling pod %s to node %s\n", pod.GetName(), nodeName)
+	if targetNodeIP != "" {
+		fmt.Printf("Scheduling pod %s to node %s\n", pod.GetName(), targetNodeIP)
 		// Bind the pod to the selected node
-		s.bindPodToNode(s.Clientsets[clusterName], pod, nodeName)
+		s.bindPodToNode(s.Clientsets[clusterName], pod, targetNodeIP)
 	}
 }
 
@@ -162,7 +162,7 @@ func (s *Scheduler) GetNodeScores() (map[string]map[string]float64, error) {
 	return nodeScores, nil
 }
 
-func getNodeIPForSchedule(nodeScores map[string]map[string]float64, pod v1.Pod) (string, string, error) {
+func (s *Scheduler) GetNodeIPForSchedule(nodeScores map[string]map[string]float64, pod *v1.Pod) (string, string, error) {
 	// Based on score only
 	bestFreeNode := ""
 	bestFreeNodeCluster := ""
@@ -170,7 +170,7 @@ func getNodeIPForSchedule(nodeScores map[string]map[string]float64, pod v1.Pod) 
 
 	for clusterName, nodes := range nodeScores {
 		for nodeIP, score := range nodes {
-			if score > bestScore {
+			if score > bestScore && hasEnoughCapacity(s.Clientsets[clusterName], nodeIP, pod) {
 				bestScore = score
 				bestFreeNode = nodeIP
 				bestFreeNodeCluster = clusterName

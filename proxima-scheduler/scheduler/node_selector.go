@@ -12,7 +12,8 @@ import (
 
 func selectNodeBasedOnCapacity(clientset *kubernetes.Clientset, nodes *v1.NodeList, pod *v1.Pod) *string {
 	for _, node := range nodes.Items {
-		if hasEnoughCapacity(clientset, &node, pod) {
+		nodeAddress := node.Status.Addresses[0].Address
+		if hasEnoughCapacity(clientset, nodeAddress, pod) {
 			selectedNode := node.Name
 			fmt.Printf("Selected node %s\n", selectedNode)
 			// Bind the pod to the selected node
@@ -42,7 +43,7 @@ func selectNodeBasedOnLatency(clientset *kubernetes.Clientset, nodes *v1.NodeLis
 			continue
 		}
 
-		if !hasEnoughCapacity(clientset, &node, pod) {
+		if !hasEnoughCapacity(clientset, nodeAddress, pod) {
 			fmt.Printf("Node %s does not have enough capacity, proceeding...\n", nodeAddress)
 			continue
 		}
@@ -60,44 +61,14 @@ func selectNodeBasedOnLatency(clientset *kubernetes.Clientset, nodes *v1.NodeLis
 	return selectedNode, nil
 }
 
-func selectNodeBasedOnScore(clientset *kubernetes.Clientset, nodes *v1.NodeList, pod *v1.Pod, db util.Database) (*string, error) {
-	nodeScores, err := db.GetNodeScores()
+func hasEnoughCapacity(clientset *kubernetes.Clientset, nodeIP string, pod *v1.Pod) bool {
+	node, err := util.GetNodeByInternalIP(clientset, nodeIP)
+
 	if err != nil {
-		return nil, fmt.Errorf("failed to get node scores: %v", err)
+		fmt.Printf("Error checking capacity for node %s: %v", nodeIP, err)
+		return false
 	}
 
-	var selectedNode *string
-	highestScore := -math.MaxFloat64
-
-	for _, node := range nodes.Items {
-		nodeAddress := node.Status.Addresses[0].Address
-
-		score, exists := nodeScores[nodeAddress]
-		if !exists {
-			fmt.Printf("Node %s does not have score data, proceeding...\n", nodeAddress)
-			continue
-		}
-
-		if !hasEnoughCapacity(clientset, &node, pod) {
-			fmt.Printf("Node %s does not have enough capacity, proceeding...\n", nodeAddress)
-			continue
-		}
-
-		if score > highestScore {
-			highestScore = score
-			selectedNode = &node.Name
-		}
-	}
-
-	if selectedNode == nil {
-		return nil, fmt.Errorf("no suitable node found for pod %s", pod.Name)
-	}
-
-	fmt.Printf("Selected node %s with score %f\n", *selectedNode, highestScore)
-	return selectedNode, nil
-}
-
-func hasEnoughCapacity(clientset *kubernetes.Clientset, node *v1.Node, pod *v1.Pod) bool {
 	nodeResources := node.Status.Allocatable
 
 	podCPURequest := resource.NewQuantity(0, resource.DecimalSI)
