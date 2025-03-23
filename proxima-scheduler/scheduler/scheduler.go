@@ -156,7 +156,7 @@ func (s *Scheduler) GetNodeScores() (map[string]map[string]float64, error) {
 			}
 
 			log.Printf(nodeIP)
-			log.Printf(s.EdgeProxies[])
+			log.Printf("%v", s.EdgeProxies)
 			if util.IsEdgeProxy(nodeIP, s.EdgeProxies) {
 				log.Printf("Found edge proxy %s. Skipping", nodeIP)
 				continue
