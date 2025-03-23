@@ -45,6 +45,7 @@ type responseRecorder struct {
 	statusCode int
 }
 
+// Ugly hardcoding for now.
 var allowedServices = map[string]bool{
 	"test-flask-service": true,
 }

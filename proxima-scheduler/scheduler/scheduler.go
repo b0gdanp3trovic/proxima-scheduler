@@ -23,9 +23,10 @@ type Scheduler struct {
 	StopCh             chan struct{}
 	DB                 util.Database
 	ScheduledPods      map[string]map[string]string
+	EdgeProxies        []string
 }
 
-func NewScheduler(schedulerName string, includedNamespaces []string, inClusterClientset *kubernetes.Clientset, kubeconfigs map[string]string, db util.Database) (*Scheduler, error) {
+func NewScheduler(schedulerName string, includedNamespaces []string, edgeProxies []string, inClusterClientset *kubernetes.Clientset, kubeconfigs map[string]string, db util.Database) (*Scheduler, error) {
 	clientsets := make(map[string]*kubernetes.Clientset)
 
 	for clusterName, kubeconfigPath := range kubeconfigs {
@@ -49,6 +50,7 @@ func NewScheduler(schedulerName string, includedNamespaces []string, inClusterCl
 		IncludedNamespaces: includedNamespaces,
 		StopCh:             make(chan struct{}),
 		DB:                 db,
+		EdgeProxies:        edgeProxies,
 	}, nil
 }
 
@@ -151,6 +153,11 @@ func (s *Scheduler) GetNodeScores() (map[string]map[string]float64, error) {
 				if addr.Type == v1.NodeInternalIP {
 					nodeIP = addr.Address
 				}
+			}
+
+			if util.IsEdgeProxy(nodeIP, s.EdgeProxies) {
+				log.Printf("Found edge proxy %s. Skipping", nodeIP)
+				continue
 			}
 
 			nodeScores[clusterName][nodeIP], err = s.DB.GetNodeScore(nodeIP)
