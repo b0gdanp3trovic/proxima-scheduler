@@ -47,14 +47,46 @@ func GetInClusterClientset() (*kubernetes.Clientset, error) {
 	return clientset, nil
 }
 
-func DiscoverNodes(clientset *kubernetes.Clientset) (*v1.NodeList, error) {
+func DiscoverNodes(clientset *kubernetes.Clientset, edgeProxies []string) (*v1.NodeList, error) {
 	nodes, err := clientset.CoreV1().Nodes().List(context.TODO(), metav1.ListOptions{})
 	if err != nil {
 		log.Fatalf("Failed to list nodes: %v", err)
 		return nil, err
 	}
 
-	return nodes, nil
+	if len(edgeProxies) == 0 {
+		return nodes, nil
+	}
+
+	edgeProxyMap := make(map[string]struct{})
+	for _, ip := range edgeProxies {
+		edgeProxyMap[ip] = struct{}{}
+	}
+
+	var filteredItems []v1.Node
+	for _, node := range nodes.Items {
+		internalIP, err := getNodeInternalIP(node)
+		if err != nil {
+			return nil, fmt.Errorf("Failed obtaining internal ip: %v", err)
+		}
+
+		externalIp, err := getNodeExternalIP(clientset, internalIP)
+		if err != nil {
+			return nil, fmt.Errorf("Failed obtaining external ip: %v", err)
+		}
+
+		if _, exists := edgeProxyMap[externalIp]; exists {
+			continue
+		}
+
+		filteredItems = append(filteredItems, node)
+	}
+
+	filteredNodes := &v1.NodeList{
+		Items: filteredItems,
+	}
+
+	return filteredNodes, nil
 }
 
 func DiscoverEdgeNodesByDaemonset(clientset *kubernetes.Clientset, namespace string, daemonsetName string) (map[string]string, error) {
@@ -106,7 +138,7 @@ func ExtractNodeAddresses(nodes []v1.Node) []string {
 }
 
 func getNodeExternalIP(clientset *kubernetes.Clientset, internalNodeIP string) (string, error) {
-	nodes, err := DiscoverNodes(clientset)
+	nodes, err := DiscoverNodes(clientset, nil)
 	if err != nil {
 		return "", fmt.Errorf("failed to discover nodes: %w", err)
 	}
@@ -125,6 +157,15 @@ func getNodeExternalIP(clientset *kubernetes.Clientset, internalNodeIP string) (
 	}
 
 	return "", fmt.Errorf("node with InternalIP %s not found", internalNodeIP)
+}
+
+func getNodeInternalIP(node v1.Node) (string, error) {
+	for _, addr := range node.Status.Addresses {
+		if addr.Type == v1.NodeInternalIP {
+			return addr.Address, nil
+		}
+	}
+	return "", fmt.Errorf("Failed obtaining node internal IP.")
 }
 
 func ObtainEdgeProxies(unfilteredEdgeproxies []string, clientset *kubernetes.Clientset, nodeIP string) (string, []string, error) {
@@ -191,7 +232,7 @@ func GetClientsetForCluster(kubeconfigPath string) (*kubernetes.Clientset, error
 }
 
 func GetNodeByInternalIP(clientset *kubernetes.Clientset, internalIP string) (*v1.Node, error) {
-	nodes, err := DiscoverNodes(clientset)
+	nodes, err := DiscoverNodes(clientset, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to discover nodes: %w", err)
 	}

@@ -139,7 +139,7 @@ func (s *Scheduler) GetNodeScores() (map[string]map[string]float64, error) {
 	nodeScores := make(map[string]map[string]float64)
 
 	for clusterName, clientset := range s.Clientsets {
-		nodeList, err := util.DiscoverNodes(clientset)
+		nodeList, err := util.DiscoverNodes(clientset, s.EdgeProxies)
 		if err != nil {
 			return nil, fmt.Errorf("failed to list nodes in cluster %s: %w", clusterName, err)
 		}
@@ -153,13 +153,6 @@ func (s *Scheduler) GetNodeScores() (map[string]map[string]float64, error) {
 				if addr.Type == v1.NodeInternalIP {
 					nodeIP = addr.Address
 				}
-			}
-
-			log.Printf(nodeIP)
-			log.Printf("%v", s.EdgeProxies)
-			if util.IsEdgeProxy(nodeIP, s.EdgeProxies) {
-				log.Printf("Found edge proxy %s. Skipping", nodeIP)
-				continue
 			}
 
 			nodeScores[clusterName][nodeIP], err = s.DB.GetNodeScore(nodeIP)

@@ -77,7 +77,7 @@ func (p *Pinger) RemoveAddress(address string) {
 }
 
 func (p *Pinger) updateAddresses() {
-	nodes, err := util.DiscoverNodes(p.Clientset)
+	nodes, err := util.DiscoverNodes(p.Clientset, nil)
 	if err != nil {
 		log.Printf("Error discovering nodes: %v\n", err)
 		return
