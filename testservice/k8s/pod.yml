@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: test-flask-service-0
+  namespace: default
+  labels:
+    app: test-flask-service
+  annotations:
+    consul-register: "true"
+spec:
+  schedulerName: proxima-scheduler
+  containers:
+    - name: test-flask-service-container
+      image: bogdanb0gdan/test-flask-service:latest
+      ports:
+        - containerPort: 8080

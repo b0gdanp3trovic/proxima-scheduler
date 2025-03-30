@@ -5,10 +5,8 @@ import (
 	"fmt"
 	"log"
 	"math"
-	"sort"
 
 	"github.com/b0gdanp3trovic/proxima-scheduler/util"
-	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
@@ -98,25 +96,47 @@ func (s *Scheduler) Run() {
 
 func (s *Scheduler) schedulePod(pod *v1.Pod) {
 	nodeScores, err := s.GetNodeScores()
-	if err != nil {
-		log.Printf("Error obtaining node scores: %v\n", err)
-	}
 
 	if err != nil {
-		log.Printf("Error listing nodes: %v\n", err)
+		log.Printf("Error obtaining node scores :")
+	}
+
+	targetNodeIP, targetCluster, err := s.GetNodeIPForSchedule(nodeScores, pod)
+	if err != nil {
+		log.Printf("Error selecting node for pod %s: %v\n", pod.GetName(), err)
 		return
 	}
 
-	targetNodeIP, clusterName, err := s.GetNodeIPForSchedule(nodeScores, pod)
-
+	node, err := util.GetNodeByInternalIP(s.Clientsets[targetCluster], targetNodeIP)
 	if err != nil {
-		log.Printf("Error selecting node for pod %s: %v\n", pod.GetName(), err)
+		log.Printf("Failed to get node for IP %s: %v", targetNodeIP, err)
+		return
+	}
+	nodeName := node.Name
+	if targetCluster == "local" {
+		log.Printf("Scheduling pod %s in local cluster via binding to node %s", pod.Name, nodeName)
+		s.bindPodToNode(s.Clientsets["local"], pod, nodeName)
+		return
 	}
 
-	if targetNodeIP != "" {
-		log.Printf("Scheduling pod %s to node %s\n", pod.GetName(), targetNodeIP)
-		// Bind the pod to the selected node
-		s.bindPodToNode(s.Clientsets[clusterName], pod, targetNodeIP)
+	podCopy := pod.DeepCopy()
+	podCopy.ResourceVersion = ""
+	podCopy.UID = ""
+	podCopy.Spec.NodeName = nodeName
+	podCopy.Name = fmt.Sprintf("%s-scheduled", pod.Name)
+
+	log.Printf("Creating pod %s in cluster %s on node %s", podCopy.Name, targetCluster, nodeName)
+	_, err = s.Clientsets[targetCluster].CoreV1().Pods(pod.Namespace).Create(context.TODO(), podCopy, metav1.CreateOptions{})
+	if err != nil {
+		log.Printf("Error creating pod in cluster %s: %v", targetCluster, err)
+		return
+	}
+
+	err = s.Clientsets["local"].CoreV1().Pods(pod.Namespace).Delete(context.TODO(), pod.Name, metav1.DeleteOptions{})
+	if err != nil {
+		log.Printf("Failed to delete original pod %s: %v", pod.Name, err)
+	} else {
+		log.Printf("Deleted original pod %s from local cluster", pod.Name)
 	}
 }
 
@@ -195,6 +215,9 @@ func (s *Scheduler) GetNodeIPForSchedule(nodeScores map[string]map[string]float6
 	return bestFreeNode, bestFreeNodeCluster, nil
 }
 
+/*
+Currently not in use
+--------------------------------
 // Apply everywhere except source
 func (s *Scheduler) ApplyDeployment(deployment *appsv1.Deployment, sourceCluster string) {
 	for clusterName, clientset := range s.Clientsets {
@@ -310,3 +333,4 @@ func setAffinityPreferences(deployment *appsv1.Deployment, sortedNodeNames []str
 		},
 	}
 }
+*/
