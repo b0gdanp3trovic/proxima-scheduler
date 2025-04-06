@@ -218,6 +218,7 @@ func (ep *EdgeProxy) getBestPod(serviceName string) (K8sPodInstance, error) {
 	var lowestLatency float64
 	latencyFound := false
 
+	log.Printf("Latencies by edge: %v", latenciesByEdge)
 	for _, pod := range pods {
 		latency, exists := latenciesByEdge[pod.NodeIP]
 		if !exists {
