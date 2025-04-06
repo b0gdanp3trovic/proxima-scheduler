@@ -15,16 +15,10 @@ rules:
     resources: ["pods/binding"]
     verbs: ["create"]
 
-  # update pod status (after binding)
+  # list, watch, get, update, delete pods
   - apiGroups: [""]
     resources: ["pods"]
-    verbs: ["update"]
-    resourceNames: ["status"]
-  
-  # watch pods
-  - apiGroups: [""]
-    resources: ["pods"]
-    verbs: ["list", "get", "watch"]
+    verbs: ["list", "get", "watch", "update", "delete"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding

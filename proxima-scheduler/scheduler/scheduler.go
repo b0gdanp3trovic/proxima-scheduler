@@ -31,7 +31,13 @@ type nodeScorePair struct {
 	Score float64
 }
 
-func NewScheduler(schedulerName string, includedNamespaces []string, edgeProxies []string, inClusterClientset *kubernetes.Clientset, kubeconfigs map[string]string, db util.Database) (*Scheduler, error) {
+func NewScheduler(
+	schedulerName string,
+	includedNamespaces []string,
+	edgeProxies []string,
+	inClusterClientset *kubernetes.Clientset,
+	kubeconfigs map[string]string,
+	db util.Database) (*Scheduler, error) {
 	clientsets := make(map[string]*kubernetes.Clientset)
 
 	for clusterName, kubeconfigPath := range kubeconfigs {

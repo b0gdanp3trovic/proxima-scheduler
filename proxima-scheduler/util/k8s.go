@@ -65,7 +65,7 @@ func DiscoverNodes(clientset *kubernetes.Clientset, edgeProxies []string) (*v1.N
 
 	var filteredItems []v1.Node
 	for _, node := range nodes.Items {
-		internalIP, err := getNodeInternalIP(node)
+		internalIP, err := GetNodeInternalIP(&node)
 		if err != nil {
 			return nil, fmt.Errorf("Failed obtaining internal ip: %v", err)
 		}
@@ -159,7 +159,7 @@ func getNodeExternalIP(clientset *kubernetes.Clientset, internalNodeIP string) (
 	return "", fmt.Errorf("node with InternalIP %s not found", internalNodeIP)
 }
 
-func getNodeInternalIP(node v1.Node) (string, error) {
+func GetNodeInternalIP(node *v1.Node) (string, error) {
 	for _, addr := range node.Status.Addresses {
 		if addr.Type == v1.NodeInternalIP {
 			return addr.Address, nil

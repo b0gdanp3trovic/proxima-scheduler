@@ -131,9 +131,7 @@ func (mw *MetricsWorker) flushMetrics() {
 	staleThreshold := 15 * time.Minute
 
 	for serviceName, podMetrics := range mw.serviceMetrics {
-		log.Printf("loop1")
 		for podURL, metrics := range podMetrics {
-			log.Printf("loop2")
 
 			avgLatency := mw.calculateAverageLatency(metrics)
 			avgRPM := mw.calculateAverageRPM(metrics)
