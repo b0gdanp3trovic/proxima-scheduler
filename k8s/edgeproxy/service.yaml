@@ -4,9 +4,12 @@ metadata:
   name: edgeproxy-service
   namespace: proxima-scheduler
 spec:
-  type: LoadBalancer
-  ports:
-    - port: 80
-      targetPort: 8080
+  type: NodePort
+  externalTrafficPolicy: Local
   selector:
     app: edgeproxy
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8080
+      nodePort: 30080

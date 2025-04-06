@@ -207,6 +207,8 @@ func (ep *EdgeProxy) getBestPod(serviceName string) (K8sPodInstance, error) {
 		return K8sPodInstance{}, fmt.Errorf("No valid pods in local cluster")
 	}
 
+	log.Printf("Pods: %v", pods)
+
 	latenciesByEdge, err := ep.database.GetAverageLatenciesForEdge(ep.NodeIP)
 	if err != nil {
 		return K8sPodInstance{}, fmt.Errorf("Failed to retrieve average latencies: %v", err)

@@ -49,5 +49,13 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: status.hostIP
+        volumeMounts:
+        - name: kubeconfigs-volume
+          mountPath: /etc/kubeconfigs
+          readOnly: true
       serviceAccountName: edgeproxy-sa
       restartPolicy: Always
+      volumes:
+      - name: kubeconfigs-volume
+        secret:
+          secretName: kubeconfigs
