@@ -208,6 +208,7 @@ func (ep *EdgeProxy) getBestPod(serviceName string) (K8sPodInstance, error) {
 	}
 
 	log.Printf("Pods: %v", pods)
+	log.Printf("Edge proxy nodeIP: %v", ep.NodeIP)
 
 	latenciesByEdge, err := ep.database.GetAverageLatenciesForEdge(ep.NodeIP)
 	if err != nil {
