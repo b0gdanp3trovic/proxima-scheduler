@@ -26,17 +26,18 @@ type K8sPodInstance struct {
 }
 
 type EdgeProxy struct {
-	proxy         *httputil.ReverseProxy
-	consulAddress string
-	database      util.Database
-	cache         map[string]cachedPod
-	cacheMutex    sync.RWMutex
-	cacheDuration time.Duration
-	NodeIP        string
-	requestCounts map[string]int
-	requestMutex  sync.Mutex
-	clientsets    map[string]*kubernetes.Clientset
-	namespace     string
+	proxy          *httputil.ReverseProxy
+	consulAddress  string
+	database       util.Database
+	cache          map[string]cachedPod
+	cacheMutex     sync.RWMutex
+	cacheDuration  time.Duration
+	NodeIP         string
+	ExternalNodeIP string
+	requestCounts  map[string]int
+	requestMutex   sync.Mutex
+	clientsets     map[string]*kubernetes.Clientset
+	namespace      string
 }
 
 type cachedPod struct {
@@ -90,6 +91,12 @@ func NewEdgeProxy(
 		return nil, fmt.Errorf("No Kubernetes clusters available")
 	}
 
+	externalNodeIP, err := util.GetNodeExternalIP(clientsets["local"], nodeIP)
+
+	if err != nil {
+		return nil, fmt.Errorf("Failed to obtain external node IP: %v", err)
+	}
+
 	return &EdgeProxy{
 		clientsets: clientsets,
 		proxy: &httputil.ReverseProxy{
@@ -133,12 +140,13 @@ func NewEdgeProxy(
 				return nil
 			},
 		},
-		consulAddress: consulAddress,
-		database:      db,
-		cache:         make(map[string]cachedPod),
-		cacheDuration: cacheDuration,
-		NodeIP:        nodeIP,
-		namespace:     "default",
+		consulAddress:  consulAddress,
+		database:       db,
+		cache:          make(map[string]cachedPod),
+		cacheDuration:  cacheDuration,
+		NodeIP:         nodeIP,
+		ExternalNodeIP: externalNodeIP,
+		namespace:      "default",
 	}, nil
 }
 
@@ -210,7 +218,7 @@ func (ep *EdgeProxy) getBestPod(serviceName string) (K8sPodInstance, error) {
 	log.Printf("Pods: %v", pods)
 	log.Printf("Edge proxy nodeIP: %v", ep.NodeIP)
 
-	latenciesByEdge, err := ep.database.GetAverageLatenciesForEdge(ep.NodeIP)
+	latenciesByEdge, err := ep.database.GetAverageLatenciesForEdge(ep.ExternalNodeIP)
 	if err != nil {
 		return K8sPodInstance{}, fmt.Errorf("Failed to retrieve average latencies: %v", err)
 	}
