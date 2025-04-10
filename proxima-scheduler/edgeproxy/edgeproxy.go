@@ -205,22 +205,40 @@ func (ep *EdgeProxy) getBestPod(serviceName string) (K8sPodInstance, error) {
 	}
 	ep.cacheMutex.RUnlock()
 
-	pods, err := getPodsForService(serviceName, ep.namespace, ep.clientsets["local"])
+	var potentialPods []K8sPodInstance
 
+	localPods, err := getPodsForService(serviceName, ep.namespace, ep.clientsets["local"])
 	if err != nil {
 		return K8sPodInstance{}, fmt.Errorf("failed to obtain pods from local cluster: %v", err)
 	}
 
-	if len(pods) == 0 {
-		return K8sPodInstance{}, fmt.Errorf("No valid pods in local cluster")
+	potentialPods = append(potentialPods, localPods...)
+
+	if len(potentialPods) == 0 {
+		for clusterName, clientset := range ep.clientsets {
+			if clusterName == "local" {
+				continue
+			}
+
+			pods, err := getPodsForService(serviceName, ep.namespace, clientset)
+			if err != nil {
+				log.Printf("Error retrieving pods from cluster %s: %v", clusterName, err)
+				continue
+			}
+			potentialPods = append(potentialPods, pods...)
+		}
 	}
 
-	log.Printf("Pods: %v", pods)
-	log.Printf("Edge proxy nodeIP: %v", ep.NodeIP)
+	if len(potentialPods) == 0 {
+		return K8sPodInstance{}, fmt.Errorf("No valid pods found")
+	}
+
+	log.Printf("Found pods: %v", potentialPods)
+	log.Printf("Edge proxy external IP: %v", ep.ExternalNodeIP)
 
 	latenciesByEdge, err := ep.database.GetAverageLatenciesForEdge(ep.ExternalNodeIP)
 	if err != nil {
-		return K8sPodInstance{}, fmt.Errorf("Failed to retrieve average latencies: %v", err)
+		return K8sPodInstance{}, fmt.Errorf("failed to retrieve average latencies: %v", err)
 	}
 
 	var bestPod K8sPodInstance
@@ -228,7 +246,7 @@ func (ep *EdgeProxy) getBestPod(serviceName string) (K8sPodInstance, error) {
 	latencyFound := false
 
 	log.Printf("Latencies by edge: %v", latenciesByEdge)
-	for _, pod := range pods {
+	for _, pod := range potentialPods {
 		latency, exists := latenciesByEdge[pod.NodeIP]
 		if !exists {
 			log.Printf("No latency data available for node %s", pod.NodeIP)
