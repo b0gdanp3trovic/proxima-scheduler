@@ -335,7 +335,7 @@ func preprocessRequest(ep *EdgeProxy) http.Handler {
 			return
 		}
 
-		log.Print("Forward host: %s", target.ForwardHost)
+		log.Printf("Forward host: %s", target.ForwardHost)
 
 		ctx := r.Context()
 		ctx = context.WithValue(ctx, "target_url", target.ForwardHost)
