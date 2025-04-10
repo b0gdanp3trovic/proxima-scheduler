@@ -247,3 +247,43 @@ func GetNodeByInternalIP(clientset *kubernetes.Clientset, internalIP string) (*v
 
 	return nil, fmt.Errorf("node with internal IP %s not found", internalIP)
 }
+
+func FindEdgeProxyNodePortAddress(clientset *kubernetes.Clientset, namespace, serviceName string) (string, error) {
+	service, err := clientset.CoreV1().Services(namespace).Get(context.TODO(), serviceName, metav1.GetOptions{})
+	if err != nil {
+		return "", fmt.Errorf("failed to get service %s: %w", serviceName, err)
+	}
+
+	if service.Spec.Type != v1.ServiceTypeNodePort {
+		return "", fmt.Errorf("service %s is not of type NodePort", serviceName)
+	}
+
+	var nodePort int32
+	for _, port := range service.Spec.Ports {
+		if port.NodePort != 0 {
+			nodePort = port.NodePort
+			break
+		}
+	}
+
+	if nodePort == 0 {
+		return "", fmt.Errorf("no NodePort found in service %s", serviceName)
+	}
+
+	nodes, err := clientset.CoreV1().Nodes().List(context.TODO(), metav1.ListOptions{
+		LabelSelector: "edge=true",
+	})
+	if err != nil {
+		return "", fmt.Errorf("failed to list nodes: %w", err)
+	}
+
+	for _, node := range nodes.Items {
+		for _, addr := range node.Status.Addresses {
+			if addr.Type == v1.NodeExternalIP {
+				return fmt.Sprintf("%s:%d", addr.Address, nodePort), nil
+			}
+		}
+	}
+
+	return "", fmt.Errorf("no edge node with ExternalIP found")
+}

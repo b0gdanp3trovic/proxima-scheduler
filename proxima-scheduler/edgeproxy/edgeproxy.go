@@ -17,19 +17,11 @@ import (
 	"k8s.io/client-go/kubernetes"
 )
 
-type K8sPodInstance struct {
-	PodIP   string
-	NodeIP  string
-	Node    string
-	PodName string
-	Port    int32
-}
-
 type EdgeProxy struct {
 	proxy          *httputil.ReverseProxy
 	consulAddress  string
 	database       util.Database
-	cache          map[string]cachedPod
+	cache          map[string]CachedForwardTarget
 	cacheMutex     sync.RWMutex
 	cacheDuration  time.Duration
 	NodeIP         string
@@ -40,12 +32,27 @@ type EdgeProxy struct {
 	namespace      string
 }
 
-type cachedPod struct {
-	pod        K8sPodInstance
+type K8sPodInstance struct {
+	PodIP   string
+	NodeIP  string
+	Node    string
+	PodName string
+	Port    int32
+	Cluster string
+}
+
+type ForwardTarget struct {
+	Pod         K8sPodInstance
+	ForwardHost string
+	UseProxy    bool
+}
+
+type CachedForwardTarget struct {
+	target     ForwardTarget
 	expiration time.Time
 }
 
-type responseRecorder struct {
+type ResponseRecorder struct {
 	http.ResponseWriter
 	statusCode int
 }
@@ -60,7 +67,7 @@ func isServiceAllowed(serviceName string) bool {
 	return exists
 }
 
-func (rec *responseRecorder) WriteHeader(statusCode int) {
+func (rec *ResponseRecorder) WriteHeader(statusCode int) {
 	rec.statusCode = statusCode
 	rec.ResponseWriter.WriteHeader(statusCode)
 }
@@ -142,7 +149,7 @@ func NewEdgeProxy(
 		},
 		consulAddress:  consulAddress,
 		database:       db,
-		cache:          make(map[string]cachedPod),
+		cache:          make(map[string]CachedForwardTarget),
 		cacheDuration:  cacheDuration,
 		NodeIP:         nodeIP,
 		ExternalNodeIP: externalNodeIP,
@@ -150,7 +157,7 @@ func NewEdgeProxy(
 	}, nil
 }
 
-func getPodsForService(serviceName, namespace string, clientset *kubernetes.Clientset) ([]K8sPodInstance, error) {
+func getPodsForService(serviceName, namespace string, cluster string, clientset *kubernetes.Clientset) ([]K8sPodInstance, error) {
 	labelSelector := fmt.Sprintf("app=%s", serviceName)
 	pods, err := clientset.CoreV1().Pods(namespace).List(context.TODO(), metav1.ListOptions{
 		LabelSelector: labelSelector,
@@ -188,28 +195,29 @@ func getPodsForService(serviceName, namespace string, clientset *kubernetes.Clie
 			NodeIP:  nodeIP,
 			PodName: pod.Name,
 			Port:    pod.Spec.Containers[0].Ports[0].ContainerPort,
+			Cluster: cluster,
 		})
 	}
 
 	return results, nil
 }
 
-func (ep *EdgeProxy) getBestPod(serviceName string) (K8sPodInstance, error) {
+func (ep *EdgeProxy) getBestPod(serviceName string) (ForwardTarget, error) {
 	ep.cacheMutex.RLock()
 	// We already have a pod in cache for a given service name
 	// and it's still valid.
 	if cached, found := ep.cache[serviceName]; found && time.Now().Before(cached.expiration) {
 		ep.cacheMutex.RUnlock()
 		log.Printf("Returning cached pod for service %s", serviceName)
-		return cached.pod, nil
+		return cached.target, nil
 	}
 	ep.cacheMutex.RUnlock()
 
 	var potentialPods []K8sPodInstance
 
-	localPods, err := getPodsForService(serviceName, ep.namespace, ep.clientsets["local"])
+	localPods, err := getPodsForService(serviceName, ep.namespace, "local", ep.clientsets["local"])
 	if err != nil {
-		return K8sPodInstance{}, fmt.Errorf("failed to obtain pods from local cluster: %v", err)
+		return ForwardTarget{}, fmt.Errorf("failed to obtain pods from local cluster: %v", err)
 	}
 
 	potentialPods = append(potentialPods, localPods...)
@@ -220,7 +228,7 @@ func (ep *EdgeProxy) getBestPod(serviceName string) (K8sPodInstance, error) {
 				continue
 			}
 
-			pods, err := getPodsForService(serviceName, ep.namespace, clientset)
+			pods, err := getPodsForService(serviceName, ep.namespace, clusterName, clientset)
 			if err != nil {
 				log.Printf("Error retrieving pods from cluster %s: %v", clusterName, err)
 				continue
@@ -230,7 +238,7 @@ func (ep *EdgeProxy) getBestPod(serviceName string) (K8sPodInstance, error) {
 	}
 
 	if len(potentialPods) == 0 {
-		return K8sPodInstance{}, fmt.Errorf("No valid pods found")
+		return ForwardTarget{}, fmt.Errorf("No valid pods found")
 	}
 
 	log.Printf("Found pods: %v", potentialPods)
@@ -238,7 +246,7 @@ func (ep *EdgeProxy) getBestPod(serviceName string) (K8sPodInstance, error) {
 
 	latenciesByEdge, err := ep.database.GetAverageLatenciesForEdge(ep.ExternalNodeIP)
 	if err != nil {
-		return K8sPodInstance{}, fmt.Errorf("failed to retrieve average latencies: %v", err)
+		return ForwardTarget{}, fmt.Errorf("failed to retrieve average latencies: %v", err)
 	}
 
 	var bestPod K8sPodInstance
@@ -261,18 +269,38 @@ func (ep *EdgeProxy) getBestPod(serviceName string) (K8sPodInstance, error) {
 	}
 
 	if !latencyFound {
-		return K8sPodInstance{}, fmt.Errorf("no suitable pod found based on latency data")
+		return ForwardTarget{}, fmt.Errorf("no suitable pod found based on latency data")
+	}
+
+	target := ForwardTarget{
+		Pod: bestPod,
+	}
+
+	if bestPod.Cluster == "local" {
+		target.ForwardHost = fmt.Sprintf("%s:%d", bestPod.PodIP, bestPod.Port)
+		target.UseProxy = false
+	} else {
+		// Use remote edge proxy instead of direct pod access
+		remoteProxyIP, err := util.FindEdgeProxyNodePortAddress(ep.clientsets[bestPod.Cluster], "proxima-scheduler", "edgeproxy-service")
+		if err != nil {
+			return ForwardTarget{}, fmt.Errorf("Error obtaining remote proxy address: %v", err)
+		}
+		if remoteProxyIP == "" {
+			return ForwardTarget{}, fmt.Errorf("no remote proxy IP available for cluster %s", bestPod.Cluster)
+		}
+		target.ForwardHost = fmt.Sprintf("%s/%s", remoteProxyIP, serviceName)
+		target.UseProxy = true
 	}
 
 	ep.cacheMutex.Lock()
-	ep.cache[serviceName] = cachedPod{
-		pod:        bestPod,
+	ep.cache[serviceName] = CachedForwardTarget{
+		target:     target,
 		expiration: time.Now().Add(ep.cacheDuration),
 	}
 	ep.cacheMutex.Unlock()
 
 	log.Printf("Selected and cached pod for service %s", serviceName)
-	return bestPod, nil
+	return target, nil
 }
 
 func getLatencyForNode(nodeIP string, averageLatencies map[string]float64) (float64, error) {
@@ -300,30 +328,30 @@ func preprocessRequest(ep *EdgeProxy) http.Handler {
 		}
 
 		// Select best pod
-		pod, err := ep.getBestPod(serviceName)
+		target, err := ep.getBestPod(serviceName)
 		if err != nil {
 			log.Printf("Failed obtaining the best pod: %v", err)
 			http.Error(w, "Failed obtaining the best pod.", http.StatusInternalServerError)
 			return
 		}
 
-		podUrl := fmt.Sprintf("%s:%d", pod.PodIP, pod.Port)
-
-		ctx := context.WithValue(r.Context(), "pod_url", podUrl)
-		ctx = context.WithValue(ctx, "node_ip", pod.NodeIP)
+		ctx := r.Context()
+		ctx = context.WithValue(ctx, "pod_url", target.ForwardHost)
+		ctx = context.WithValue(ctx, "node_ip", target.Pod.NodeIP)
 		ctx = context.WithValue(ctx, "start_time", time.Now())
 		ctx = context.WithValue(ctx, "service_name", serviceName)
 
-		recorder := &responseRecorder{ResponseWriter: w, statusCode: http.StatusOK}
-		log.Printf("Forwarding request to pod %s on node %s", podUrl, pod.NodeIP)
+		recorder := &ResponseRecorder{ResponseWriter: w, statusCode: http.StatusOK}
+		log.Printf("Forwarding request to %s (via proxy: %v)", target.ForwardHost, target.UseProxy)
 		ep.proxy.ServeHTTP(recorder, r.WithContext(ctx))
 
 		if recorder.statusCode >= http.StatusInternalServerError {
-			log.Printf("Request to pod %s failed with status %d, invalidating cache for service %s", podUrl, recorder.statusCode, serviceName)
+			log.Printf("Request to %s failed with status %d, invalidating cache for service %s", target.ForwardHost, recorder.statusCode, serviceName)
 			ep.invalidateCache(serviceName)
 			http.Error(w, "Failed to forward request to pod", http.StatusBadGateway)
 		}
 	})
+
 }
 
 func (ep *EdgeProxy) invalidateCache(serviceName string) {
