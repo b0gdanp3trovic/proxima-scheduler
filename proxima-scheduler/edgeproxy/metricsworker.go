@@ -123,7 +123,6 @@ func (mw *MetricsWorker) periodicFlush() {
 }
 
 func (mw *MetricsWorker) flushMetrics() {
-	log.Printf("flushin")
 	mw.metricsMutex.Lock()
 	defer mw.metricsMutex.Unlock()
 
