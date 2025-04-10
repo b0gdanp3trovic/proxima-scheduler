@@ -108,7 +108,7 @@ func NewEdgeProxy(
 		clientsets: clientsets,
 		proxy: &httputil.ReverseProxy{
 			Director: func(req *http.Request) {
-				podUrl := req.Context().Value("pod_url").(string)
+				targetUrl := req.Context().Value("target_url").(string)
 
 				// Adjust the path
 				parts := strings.Split(req.URL.Path, "/")
@@ -121,18 +121,18 @@ func NewEdgeProxy(
 				}
 
 				req.URL.Scheme = "http"
-				req.URL.Host = podUrl
-				log.Printf("Forwarding request to %s", podUrl)
+				req.URL.Host = targetUrl
+				log.Printf("Forwarding request to %s", targetUrl)
 
 				// Forward the request to the pod
 				req.URL.Scheme = "http"
-				req.URL.Host = podUrl
-				log.Printf("Forwarding request to %s", podUrl)
+				req.URL.Host = targetUrl
+				log.Printf("Forwarding request to %s", targetUrl)
 			},
 			ModifyResponse: func(resp *http.Response) error {
 				// Measure latency and log it
 				latency := time.Since(resp.Request.Context().Value("start_time").(time.Time))
-				podUrl := resp.Request.Context().Value("pod_url").(string)
+				podUrl := resp.Request.Context().Value("target_url").(string)
 				nodeIP := resp.Request.Context().Value("node_ip").(string)
 				serviceName := resp.Request.Context().Value("service_name").(string)
 
@@ -281,14 +281,14 @@ func (ep *EdgeProxy) getBestPod(serviceName string) (ForwardTarget, error) {
 		target.UseProxy = false
 	} else {
 		// Use remote edge proxy instead of direct pod access
-		remoteProxyIP, err := util.FindEdgeProxyNodePortAddress(ep.clientsets[bestPod.Cluster], "proxima-scheduler", "edgeproxy-service")
+		remoteProxyUrl, err := util.FindEdgeProxyNodePortAddress(ep.clientsets[bestPod.Cluster], "proxima-scheduler", "edgeproxy-service")
 		if err != nil {
 			return ForwardTarget{}, fmt.Errorf("Error obtaining remote proxy address: %v", err)
 		}
-		if remoteProxyIP == "" {
+		if remoteProxyUrl == "" {
 			return ForwardTarget{}, fmt.Errorf("no remote proxy IP available for cluster %s", bestPod.Cluster)
 		}
-		target.ForwardHost = fmt.Sprintf("%s/%s", remoteProxyIP, serviceName)
+		target.ForwardHost = remoteProxyUrl
 		target.UseProxy = true
 	}
 
@@ -335,8 +335,10 @@ func preprocessRequest(ep *EdgeProxy) http.Handler {
 			return
 		}
 
+		log.Print("Forward host: %s", target.ForwardHost)
+
 		ctx := r.Context()
-		ctx = context.WithValue(ctx, "pod_url", target.ForwardHost)
+		ctx = context.WithValue(ctx, "target_url", target.ForwardHost)
 		ctx = context.WithValue(ctx, "node_ip", target.Pod.NodeIP)
 		ctx = context.WithValue(ctx, "start_time", time.Now())
 		ctx = context.WithValue(ctx, "service_name", serviceName)
