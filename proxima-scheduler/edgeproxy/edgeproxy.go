@@ -120,14 +120,9 @@ func NewEdgeProxy(
 					req.URL.Path = "/"
 				}
 
-				req.URL.Scheme = "http"
-				req.URL.Host = targetUrl
-				log.Printf("Forwarding request to %s", targetUrl)
-
 				// Forward the request to the pod
 				req.URL.Scheme = "http"
 				req.URL.Host = targetUrl
-				log.Printf("Forwarding request to %s", targetUrl)
 			},
 			ModifyResponse: func(resp *http.Response) error {
 				// Measure latency and log it
