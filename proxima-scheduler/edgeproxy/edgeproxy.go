@@ -218,6 +218,7 @@ func (ep *EdgeProxy) getBestPod(serviceName string) (ForwardTarget, error) {
 	potentialPods = append(potentialPods, localPods...)
 
 	if len(potentialPods) == 0 {
+		log.Printf("No pods found in the local cluster. Proceeding to remote clusters.")
 		for clusterName, clientset := range ep.clientsets {
 			if clusterName == "local" {
 				continue
