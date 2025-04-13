@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"log"
 	"math"
+	"sync"
+	"time"
 
 	"github.com/b0gdanp3trovic/proxima-scheduler/util"
 	v1 "k8s.io/api/core/v1"
@@ -14,7 +16,13 @@ import (
 	"k8s.io/client-go/tools/cache"
 )
 
-type DesiredStateResult map[string]map[string]string
+type PodLocation struct {
+	Cluster string
+	NodeIP  string
+	Status  string
+}
+
+type TrackedPods map[string]map[string]PodLocation
 
 type Scheduler struct {
 	Clientsets         map[string]*kubernetes.Clientset
@@ -24,6 +32,8 @@ type Scheduler struct {
 	DB                 util.Database
 	ScheduledPods      map[string]map[string]string
 	EdgeProxies        []string
+	TrackedPods        TrackedPods
+	PodMutex           sync.RWMutex
 }
 
 type nodeScorePair struct {
@@ -62,6 +72,7 @@ func NewScheduler(
 		StopCh:             make(chan struct{}),
 		DB:                 db,
 		EdgeProxies:        edgeProxies,
+		TrackedPods:        make(TrackedPods),
 	}, nil
 }
 
@@ -98,6 +109,21 @@ func (s *Scheduler) Run() {
 			}(clusterName, ns, clientset)
 		}
 	}
+
+	go func() {
+		ticker := time.NewTicker(10 * time.Second)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-ticker.C:
+				s.ReconcilePods()
+			case <-s.StopCh:
+				log.Println("Stopping reconciliation loop")
+				return
+			}
+		}
+	}()
 }
 
 func (s *Scheduler) schedulePod(pod *v1.Pod) {
@@ -144,6 +170,68 @@ func (s *Scheduler) schedulePod(pod *v1.Pod) {
 	} else {
 		log.Printf("Deleted original pod %s from local cluster", pod.Name)
 	}
+
+	app := pod.Labels["app"]
+	if app == "" {
+		app = "unknown"
+	}
+
+	s.PodMutex.Lock()
+	if _, ok := s.TrackedPods[app]; !ok {
+		s.TrackedPods[app] = make(map[string]PodLocation)
+	}
+	s.TrackedPods[app][podCopy.Name] = PodLocation{
+		Cluster: targetCluster,
+		NodeIP:  targetNodeIP,
+		Status:  "Scheduled",
+	}
+	s.PodMutex.Unlock()
+}
+
+func (s *Scheduler) ReconcilePods() {
+	newState := make(TrackedPods)
+
+	for clusterName, clientset := range s.Clientsets {
+		pods, err := clientset.CoreV1().Pods("").List(context.TODO(), metav1.ListOptions{
+			LabelSelector: "app",
+		})
+
+		if err != nil {
+			log.Printf("Error listing pods in cluster %s: %v", clusterName, err)
+		}
+
+		for _, pod := range pods.Items {
+			app := pod.Labels["app"]
+			if app == "" {
+				log.Printf("App label not found on pod %v, using unknown.", pod.Name)
+			}
+
+			if _, ok := newState[app]; !ok {
+				newState[app] = make(map[string]PodLocation)
+			}
+
+			node, err := clientset.CoreV1().Nodes().Get(context.TODO(), pod.Spec.NodeName, metav1.GetOptions{})
+			if err != nil {
+				log.Printf("Error obtaining node %s", pod.Spec.NodeName)
+			}
+
+			nodeIP, err := util.GetNodeInternalIP(node)
+			if err != nil {
+				log.Printf("Error obtaining NodeIP for node %s", pod.Spec.NodeName)
+			}
+
+			newState[app][pod.Name] = PodLocation{
+				Cluster: clusterName,
+				NodeIP:  nodeIP,
+			}
+		}
+	}
+
+	s.PodMutex.Lock()
+	s.TrackedPods = newState
+	s.PodMutex.Unlock()
+
+	log.Printf("Updated pod state. %d apps being tracked.", len(newState))
 }
 
 func (s *Scheduler) bindPodToNode(clientset *kubernetes.Clientset, pod *v1.Pod, nodeName string) {
@@ -220,123 +308,3 @@ func (s *Scheduler) GetNodeIPForSchedule(nodeScores map[string]map[string]float6
 
 	return bestFreeNode, bestFreeNodeCluster, nil
 }
-
-/*
-Currently not in use
---------------------------------
-// Apply everywhere except source
-func (s *Scheduler) ApplyDeployment(deployment *appsv1.Deployment, sourceCluster string) {
-	for clusterName, clientset := range s.Clientsets {
-		if clusterName == sourceCluster {
-			continue
-		}
-
-		deployCopy := deployment.DeepCopy()
-		replicas := int32(0)
-		deployCopy.Spec.Replicas = &replicas
-		deployCopy.ResourceVersion = ""
-		deployCopy.UID = ""
-
-		_, err := clientset.AppsV1().Deployments(deployCopy.Namespace).Create(context.TODO(), deployCopy, metav1.CreateOptions{})
-		if err != nil {
-			_, updateErr := clientset.AppsV1().Deployments(deployCopy.Namespace).Update(context.TODO(), deployCopy, metav1.UpdateOptions{})
-			if updateErr != nil {
-				log.Printf("Error applying deployment to cluster %s: %v", clusterName, updateErr)
-				continue
-			}
-		}
-
-		log.Printf("Deployment applied to cluster %s", clusterName)
-	}
-}
-
-// For now accept only deployments, handy since you can set desired number
-func getDeploymentFromPod(clientset *kubernetes.Clientset, pod *v1.Pod) (*appsv1.Deployment, error) {
-	rsOwner := metav1.GetControllerOf(pod)
-	if rsOwner == nil || rsOwner.Kind != "ReplicaSet" {
-		return nil, fmt.Errorf("pod %s has no ReplicaSet owner", pod.Name)
-	}
-
-	rs, err := clientset.AppsV1().ReplicaSets(pod.Namespace).Get(context.TODO(), rsOwner.Name, metav1.GetOptions{})
-	if err != nil {
-		return nil, fmt.Errorf("failed to get ReplicaSet: %w", err)
-	}
-
-	deployOwner := metav1.GetControllerOf(rs)
-	if deployOwner == nil || deployOwner.Kind != "Deployment" {
-		return nil, fmt.Errorf("replicaSet %s has no Deployment owner", rs.Name)
-	}
-
-	deployment, err := clientset.AppsV1().Deployments(pod.Namespace).Get(context.TODO(), deployOwner.Name, metav1.GetOptions{})
-	if err != nil {
-		return nil, fmt.Errorf("failed to get Deployment: %w", err)
-	}
-
-	return deployment, nil
-}
-
-func getSortedNodeNamesByScore(clientset *kubernetes.Clientset, nodeScores map[string]float64) []string {
-	var pairs []nodeScorePair
-
-	nodes, err := clientset.CoreV1().Nodes().List(context.TODO(), metav1.ListOptions{})
-	if err != nil {
-		log.Printf("Failed to list nodes: %v", err)
-		return nil
-	}
-
-	ipToName := map[string]string{}
-	for _, node := range nodes.Items {
-		for _, addr := range node.Status.Addresses {
-			if addr.Type == v1.NodeInternalIP {
-				ipToName[addr.Address] = node.Name
-			}
-		}
-	}
-
-	for ip, score := range nodeScores {
-		if name, exists := ipToName[ip]; exists {
-			pairs = append(pairs, nodeScorePair{name, score})
-		}
-	}
-
-	sort.Slice(pairs, func(i, j int) bool {
-		return pairs[i].Score > pairs[j].Score
-	})
-
-	var sortedNodeNames []string
-	for _, pair := range pairs {
-		sortedNodeNames = append(sortedNodeNames, pair.Name)
-	}
-	return sortedNodeNames
-}
-
-func setAffinityPreferences(deployment *appsv1.Deployment, sortedNodeNames []string) {
-	preferredTerms := []v1.PreferredSchedulingTerm{}
-	weight := int32(100)
-
-	for _, nodeName := range sortedNodeNames {
-		preferredTerms = append(preferredTerms, v1.PreferredSchedulingTerm{
-			Weight: weight,
-			Preference: v1.NodeSelectorTerm{
-				MatchExpressions: []v1.NodeSelectorRequirement{
-					{
-						Key:      "kubernetes.io/hostname",
-						Operator: v1.NodeSelectorOpIn,
-						Values:   []string{nodeName},
-					},
-				},
-			},
-		})
-		weight -= 10
-		if weight <= 0 {
-			weight = 1
-		}
-	}
-
-	deployment.Spec.Template.Spec.Affinity = &v1.Affinity{
-		NodeAffinity: &v1.NodeAffinity{
-			PreferredDuringSchedulingIgnoredDuringExecution: preferredTerms,
-		},
-	}
-}
-*/
