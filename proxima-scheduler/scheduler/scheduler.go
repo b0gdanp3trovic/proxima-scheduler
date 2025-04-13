@@ -192,37 +192,39 @@ func (s *Scheduler) ReconcilePods() {
 	newState := make(TrackedPods)
 
 	for clusterName, clientset := range s.Clientsets {
-		pods, err := clientset.CoreV1().Pods("").List(context.TODO(), metav1.ListOptions{
-			LabelSelector: "app",
-		})
+		for _, namespace := range s.IncludedNamespaces {
+			pods, err := clientset.CoreV1().Pods(namespace).List(context.TODO(), metav1.ListOptions{
+				LabelSelector: "app",
+			})
 
-		if err != nil {
-			log.Printf("Error listing pods in cluster %s: %v", clusterName, err)
-		}
-
-		for _, pod := range pods.Items {
-			app := pod.Labels["app"]
-			if app == "" {
-				log.Printf("App label not found on pod %v, using unknown.", pod.Name)
-			}
-
-			if _, ok := newState[app]; !ok {
-				newState[app] = make(map[string]PodLocation)
-			}
-
-			node, err := clientset.CoreV1().Nodes().Get(context.TODO(), pod.Spec.NodeName, metav1.GetOptions{})
 			if err != nil {
-				log.Printf("Error obtaining node %s", pod.Spec.NodeName)
+				log.Printf("Error listing pods in cluster %s and namespace %s: %v", clusterName, namespace, err)
 			}
 
-			nodeIP, err := util.GetNodeInternalIP(node)
-			if err != nil {
-				log.Printf("Error obtaining NodeIP for node %s", pod.Spec.NodeName)
-			}
+			for _, pod := range pods.Items {
+				app := pod.Labels["app"]
+				if app == "" {
+					log.Printf("App label not found on pod %v, using unknown.", pod.Name)
+				}
 
-			newState[app][pod.Name] = PodLocation{
-				Cluster: clusterName,
-				NodeIP:  nodeIP,
+				if _, ok := newState[app]; !ok {
+					newState[app] = make(map[string]PodLocation)
+				}
+
+				node, err := clientset.CoreV1().Nodes().Get(context.TODO(), pod.Spec.NodeName, metav1.GetOptions{})
+				if err != nil {
+					log.Printf("Error obtaining node %s", pod.Spec.NodeName)
+				}
+
+				nodeIP, err := util.GetNodeInternalIP(node)
+				if err != nil {
+					log.Printf("Error obtaining NodeIP for node %s", pod.Spec.NodeName)
+				}
+
+				newState[app][pod.Name] = PodLocation{
+					Cluster: clusterName,
+					NodeIP:  nodeIP,
+				}
 			}
 		}
 	}
