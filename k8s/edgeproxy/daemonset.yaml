@@ -39,12 +39,15 @@ spec:
         - name: DATABASE_ENABLED
           value: "true"
         - name: INFLUXDB_ADDRESS
-          value: "http://172.104.247.42:8086"
+          value: "http://influxdb:8086"
         - name: INFLUXDB_TOKEN
           valueFrom:
             secretKeyRef:
               name: influxdb-auth-token
               key: INFLUXDB_TOKEN
+        # used on Kind cluster locally
+        - name: KIND_NETWORK_IP
+          value: "172.19.0.5"
         - name: NODE_IP
           valueFrom:
             fieldRef:

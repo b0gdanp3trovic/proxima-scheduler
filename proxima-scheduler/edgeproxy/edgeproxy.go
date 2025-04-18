@@ -30,6 +30,7 @@ type EdgeProxy struct {
 	requestMutex   sync.Mutex
 	clientsets     map[string]*kubernetes.Clientset
 	namespace      string
+	kindNetworkIP  string
 }
 
 type K8sPodInstance struct {
@@ -79,7 +80,8 @@ func NewEdgeProxy(
 	inClusterClientset *kubernetes.Clientset,
 	kubeconfigs map[string]string,
 	cacheDuration time.Duration,
-	nodeIP string) (*EdgeProxy, error) {
+	nodeIP string,
+	kindNetworkIP string) (*EdgeProxy, error) {
 
 	clientsets := make(map[string]*kubernetes.Clientset)
 
@@ -98,10 +100,15 @@ func NewEdgeProxy(
 		return nil, fmt.Errorf("No Kubernetes clusters available")
 	}
 
-	externalNodeIP, err := util.GetNodeExternalIP(clientsets["local"], nodeIP)
+	var externalNodeIP string
 
-	if err != nil {
-		return nil, fmt.Errorf("Failed to obtain external node IP: %v", err)
+	if kindNetworkIP == "" {
+		var err error
+		externalNodeIP, err = util.GetNodeExternalIP(clientsets["local"], nodeIP)
+
+		if err != nil {
+			return nil, fmt.Errorf("Failed to obtain external node IP: %v", err)
+		}
 	}
 
 	return &EdgeProxy{
@@ -149,6 +156,7 @@ func NewEdgeProxy(
 		NodeIP:         nodeIP,
 		ExternalNodeIP: externalNodeIP,
 		namespace:      "default",
+		kindNetworkIP:  kindNetworkIP,
 	}, nil
 }
 

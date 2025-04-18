@@ -25,6 +25,7 @@ type Config struct {
 	ConsulCertPath     string
 	EdgeProxies        []string
 	KubeConfigsPath    string
+	KindNetworkIP      string
 }
 
 func LoadConfig() *Config {
@@ -44,6 +45,7 @@ func LoadConfig() *Config {
 	influxDBToken := getEnv("INFLUXDB_TOKEN", "")
 	edgeProxies := parseCommaSeparatedArray("EDGE_PROXIES", []string{"default"})
 	kubeConfigsPath := getEnv("KUBECONFIGS_PATH", "/etc/kubeconfigs")
+	kindNetworkIP := getEnv("KIND_NETWORK_IP", "")
 
 	return &Config{
 		InfluxDBAddress:    influxDBAddress,
@@ -62,6 +64,7 @@ func LoadConfig() *Config {
 		ConsulCertPath:     consulCertPath,
 		EdgeProxies:        edgeProxies,
 		KubeConfigsPath:    kubeConfigsPath,
+		KindNetworkIP:      kindNetworkIP,
 	}
 }
 

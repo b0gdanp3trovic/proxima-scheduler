@@ -4,6 +4,8 @@ name: proxima2
 nodes:
   - role: control-plane
   - role: worker
+    labels:
+      edge: true
   - role: worker
   - role: worker
   - role: worker

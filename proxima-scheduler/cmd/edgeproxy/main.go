@@ -31,7 +31,16 @@ func main() {
 	// TODO - change
 	cacheDuration := 10 * time.Second
 
-	edgeProxy, err := edgeproxy.NewEdgeProxy(cfg.ConsulURL, latencyWorker, influxDb, inClusterClientset, kubeconfigs, cacheDuration, cfg.NodeIP)
+	edgeProxy, err := edgeproxy.NewEdgeProxy(
+		cfg.ConsulURL,
+		latencyWorker,
+		influxDb,
+		inClusterClientset,
+		kubeconfigs,
+		cacheDuration,
+		cfg.NodeIP,
+		cfg.KindNetworkIP,
+	)
 
 	if err != nil {
 		log.Fatalf("Failed to create scheduler: %v", err)
