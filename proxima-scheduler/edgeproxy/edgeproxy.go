@@ -100,9 +100,9 @@ func NewEdgeProxy(
 		return nil, fmt.Errorf("No Kubernetes clusters available")
 	}
 
-	var externalNodeIP string
+	externalNodeIP := kindNetworkIP
 
-	if kindNetworkIP == "" {
+	if externalNodeIP == "" {
 		var err error
 		externalNodeIP, err = util.GetNodeExternalIP(clientsets["local"], nodeIP)
 

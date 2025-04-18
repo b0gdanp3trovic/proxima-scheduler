@@ -23,7 +23,15 @@ func main() {
 	influxClient := influxdb2.NewClient(cfg.InfluxDBAddress, cfg.InfluxDBToken)
 	influxDb := util.NewInfluxDB(influxClient, "proxima", "proxima")
 
-	pinger, err := pinger.NewPinger(cfg.PingInterval, clientset, cfg.DatabaseEnabled, influxDb, cfg.NodeIP, cfg.EdgeProxies)
+	pinger, err := pinger.NewPinger(
+		cfg.PingInterval,
+		clientset,
+		cfg.DatabaseEnabled,
+		influxDb,
+		cfg.NodeIP,
+		cfg.EdgeProxies,
+		cfg.KindNetworkIP,
+	)
 	if err != nil {
 		log.Fatalf("Failed to initialize pinger: %v", err)
 		os.Exit(1)

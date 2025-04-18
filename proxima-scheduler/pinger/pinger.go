@@ -24,6 +24,7 @@ type Pinger struct {
 	NodeIP              string
 	ExternalNodeIP      string
 	EdgeProxies         []string
+	KindNetworkIP       string
 }
 
 func NewPinger(
@@ -33,6 +34,7 @@ func NewPinger(
 	db util.Database,
 	nodeIP string,
 	edgeProxies []string,
+	kindNetworkIP string,
 ) (*Pinger, error) {
 	p := &Pinger{
 		Addr:                make(map[string]struct{}),
@@ -46,10 +48,11 @@ func NewPinger(
 		NodeIP:              nodeIP,
 		ExternalNodeIP:      "",
 		EdgeProxies:         []string{},
+		KindNetworkIP:       kindNetworkIP,
 	}
 
 	// Filter out current node ip from edge proxy IPs
-	externalNodeIP, filteredEdgeProxies, err := util.ObtainEdgeProxies(edgeProxies, p.Clientset, p.NodeIP)
+	externalNodeIP, filteredEdgeProxies, err := util.ObtainEdgeProxies(edgeProxies, p.Clientset, p.NodeIP, p.KindNetworkIP)
 	if err != nil {
 		return nil, fmt.Errorf("failed to obtain edge proxies: %w", err)
 	}

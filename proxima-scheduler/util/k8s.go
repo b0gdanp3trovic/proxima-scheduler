@@ -168,12 +168,17 @@ func GetNodeInternalIP(node *v1.Node) (string, error) {
 	return "", fmt.Errorf("Failed obtaining node internal IP.")
 }
 
-func ObtainEdgeProxies(unfilteredEdgeproxies []string, clientset *kubernetes.Clientset, nodeIP string) (string, []string, error) {
+func ObtainEdgeProxies(unfilteredEdgeproxies []string, clientset *kubernetes.Clientset, nodeIP string, kindNetworkIP string) (string, []string, error) {
 	var filteredEdgeProxies []string
-	currentNodeIP, err := GetNodeExternalIP(clientset, nodeIP)
-	if err != nil {
-		log.Printf("Error obtaining current node IP: %v\n", err)
-		return "", nil, err
+	currentNodeIP := kindNetworkIP
+
+	if currentNodeIP == "" {
+		var err error
+		currentNodeIP, err = GetNodeExternalIP(clientset, nodeIP)
+		if err != nil {
+			log.Printf("Error obtaining current node IP: %v\n", err)
+			return "", nil, err
+		}
 	}
 
 	for _, edgeProxyIP := range unfilteredEdgeproxies {
