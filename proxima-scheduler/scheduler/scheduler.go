@@ -202,6 +202,10 @@ func (s *Scheduler) ReconcilePods() {
 			}
 
 			for _, pod := range pods.Items {
+				if pod.Spec.NodeName == "" {
+					continue
+				}
+
 				app := pod.Labels["app"]
 				if app == "" {
 					log.Printf("App label not found on pod %v, using unknown.", pod.Name)

@@ -1,12 +1,11 @@
 apiVersion: apps/v1
-kind: Deployment
+kind: DaemonSet
 metadata:
   name: proxima-scheduler
   namespace: proxima-scheduler
   labels:
     app: proxima-scheduler
 spec:
-  replicas: 1
   selector:
     matchLabels:
       app: proxima-scheduler
@@ -15,6 +14,11 @@ spec:
       labels:
         app: proxima-scheduler
     spec:
+      tolerations:
+      - key: "dedicated"
+        operator: "Equal"
+        value: "edge"
+        effect: "NoSchedule"
       nodeSelector:
         edge: "true"
       containers:
@@ -59,4 +63,3 @@ spec:
       - name: kubeconfigs-volume
         secret:
           secretName: kubeconfigs
-
