@@ -266,7 +266,7 @@ func (s *Scheduler) GetNodeScores() (map[string]map[string]float64, error) {
 	nodeScores := make(map[string]map[string]float64)
 
 	for clusterName, clientset := range s.Clientsets {
-		nodeList, err := util.DiscoverNodes(clientset, s.EdgeProxies)
+		nodeList, err := util.DiscoverNodes(clientset, true)
 		if err != nil {
 			return nil, fmt.Errorf("failed to list nodes in cluster %s: %w", clusterName, err)
 		}
