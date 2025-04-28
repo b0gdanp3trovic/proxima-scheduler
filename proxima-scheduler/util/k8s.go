@@ -47,46 +47,21 @@ func GetInClusterClientset() (*kubernetes.Clientset, error) {
 	return clientset, nil
 }
 
-func DiscoverNodes(clientset *kubernetes.Clientset, edgeProxies []string) (*v1.NodeList, error) {
-	nodes, err := clientset.CoreV1().Nodes().List(context.TODO(), metav1.ListOptions{})
+func DiscoverNodes(clientset *kubernetes.Clientset, filterOutEdgeProxies bool) (*v1.NodeList, error) {
+	var opts metav1.ListOptions
+
+	if filterOutEdgeProxies {
+		opts = metav1.ListOptions{
+			LabelSelector: "edge!=true",
+		}
+	}
+
+	nodes, err := clientset.CoreV1().Nodes().List(context.TODO(), opts)
 	if err != nil {
-		log.Fatalf("Failed to list nodes: %v", err)
-		return nil, err
+		return nil, fmt.Errorf("failed to list nodes: %w", err)
 	}
 
-	if len(edgeProxies) == 0 {
-		return nodes, nil
-	}
-
-	edgeProxyMap := make(map[string]struct{})
-	for _, ip := range edgeProxies {
-		edgeProxyMap[ip] = struct{}{}
-	}
-
-	var filteredItems []v1.Node
-	for _, node := range nodes.Items {
-		internalIP, err := GetNodeInternalIP(&node)
-		if err != nil {
-			return nil, fmt.Errorf("Failed obtaining internal ip: %v", err)
-		}
-
-		externalIp, err := GetNodeExternalIP(clientset, internalIP)
-		if err != nil {
-			return nil, fmt.Errorf("Failed obtaining external ip: %v", err)
-		}
-
-		if _, exists := edgeProxyMap[externalIp]; exists {
-			continue
-		}
-
-		filteredItems = append(filteredItems, node)
-	}
-
-	filteredNodes := &v1.NodeList{
-		Items: filteredItems,
-	}
-
-	return filteredNodes, nil
+	return nodes, nil
 }
 
 func DiscoverEdgeNodesByDaemonset(clientset *kubernetes.Clientset, namespace string, daemonsetName string) (map[string]string, error) {
@@ -138,7 +113,7 @@ func ExtractNodeAddresses(nodes []v1.Node) []string {
 }
 
 func GetNodeExternalIP(clientset *kubernetes.Clientset, internalNodeIP string) (string, error) {
-	nodes, err := DiscoverNodes(clientset, nil)
+	nodes, err := DiscoverNodes(clientset, false)
 	if err != nil {
 		return "", fmt.Errorf("failed to discover nodes: %w", err)
 	}
@@ -237,7 +212,7 @@ func GetClientsetForCluster(kubeconfigPath string) (*kubernetes.Clientset, error
 }
 
 func GetNodeByInternalIP(clientset *kubernetes.Clientset, internalIP string) (*v1.Node, error) {
-	nodes, err := DiscoverNodes(clientset, nil)
+	nodes, err := DiscoverNodes(clientset, false)
 	if err != nil {
 		return nil, fmt.Errorf("failed to discover nodes: %w", err)
 	}
