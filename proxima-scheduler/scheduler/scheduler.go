@@ -130,7 +130,7 @@ func (s *Scheduler) schedulePod(pod *v1.Pod) {
 	nodeScores, err := s.GetNodeScores()
 
 	if err != nil {
-		log.Printf("Error obtaining node scores :")
+		log.Printf("Error obtaining node scores: %v", err)
 	}
 
 	targetNodeIP, targetCluster, err := s.GetNodeIPForSchedule(nodeScores, pod)
