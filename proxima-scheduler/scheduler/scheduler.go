@@ -145,12 +145,15 @@ func (s *Scheduler) schedulePod(pod *v1.Pod) {
 		return
 	}
 	nodeName := node.Name
+
+	// Best node in local cluster, schedule here and exit
 	if targetCluster == "local" {
 		log.Printf("Scheduling pod %s in local cluster via binding to node %s", pod.Name, nodeName)
 		s.bindPodToNode(s.Clientsets["local"], pod, nodeName)
 		return
 	}
 
+	// Remote cluster, perform a deep copy and schedule
 	podCopy := pod.DeepCopy()
 	podCopy.ResourceVersion = ""
 	podCopy.UID = ""
@@ -238,6 +241,7 @@ func (s *Scheduler) ReconcilePods() {
 	s.PodMutex.Unlock()
 
 	log.Printf("Updated pod state. %d apps being tracked.", len(newState))
+	log.Printf("Current state: %v", newState)
 }
 
 func (s *Scheduler) bindPodToNode(clientset *kubernetes.Clientset, pod *v1.Pod, nodeName string) {
