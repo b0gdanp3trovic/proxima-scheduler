@@ -193,6 +193,11 @@ func (s *Scheduler) schedulePod(pod *v1.Pod) {
 
 func (s *Scheduler) ReconcilePods() {
 	newState := make(TrackedPods)
+	nodeScores, err := s.GetNodeScores()
+	if err != nil {
+		log.Printf("Failed to get node scores during reconciliation: %v", err)
+		return
+	}
 
 	for clusterName, clientset := range s.Clientsets {
 		for _, namespace := range s.IncludedNamespaces {
@@ -231,6 +236,52 @@ func (s *Scheduler) ReconcilePods() {
 				newState[app][pod.Name] = PodLocation{
 					Cluster: clusterName,
 					NodeIP:  nodeIP,
+				}
+
+				//TODO: throttle rescheduling
+				currentScore := nodeScores[clusterName][nodeIP]
+				bestIP, bestCluster, err := s.GetNodeIPForSchedule(nodeScores, &pod)
+
+				if err != nil {
+					log.Printf("Error getting best node for pod %s: %v", pod.Name, err)
+					continue
+				}
+
+				bestScore := nodeScores[bestCluster][bestIP]
+
+				if bestScore > currentScore*1.2 {
+					log.Printf("Pod %s is on a suboptimal node. Best score: %.2f vs current %.2f. Rescheduling...", pod.Name, bestScore, currentScore)
+
+					node, err := util.GetNodeByInternalIP(s.Clientsets[bestCluster], bestIP)
+					if err != nil {
+						log.Printf("Failed to get best node for IP %s: %v", bestIP, err)
+						continue
+					}
+					nodeName := node.Name
+
+					newPod := pod.DeepCopy()
+					newPod.ResourceVersion = ""
+					newPod.UID = ""
+					newPod.Spec.NodeName = nodeName
+					newPod.Name = fmt.Sprintf("%s-rescheduled", pod.Name)
+
+					_, err = s.Clientsets[bestCluster].CoreV1().Pods(newPod.Namespace).Create(context.TODO(), newPod, metav1.CreateOptions{})
+					if err != nil {
+						log.Printf("Failed to create rescheduled pod %s in cluster %s: %v", newPod.Name, bestCluster, err)
+						continue
+					}
+
+					err = clientset.CoreV1().Pods(pod.Namespace).Delete(context.TODO(), pod.Name, metav1.DeleteOptions{})
+					if err != nil {
+						log.Printf("Failed to delete original pod %s from cluster %s: %v", pod.Name, clusterName, err)
+					} else {
+						log.Printf("Successfully rescheduled pod %s to %s (%s)", pod.Name, nodeName, bestCluster)
+						newState[app][newPod.Name] = PodLocation{
+							Cluster: bestCluster,
+							NodeIP:  bestIP,
+							Status:  "Rescheduled",
+						}
+					}
 				}
 			}
 		}
