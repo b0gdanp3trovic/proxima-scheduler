@@ -99,6 +99,12 @@ func (s *Scheduler) Run() {
 						AddFunc: func(obj interface{}) {
 							pod := obj.(*v1.Pod)
 							if pod.Spec.SchedulerName == s.SchedulerName && pod.Spec.NodeName == "" {
+								if pod.Annotations["proxima-scheduler/generated"] == "true" {
+									log.Printf("Skipping generated pod %s", pod.Name)
+									s.schedulePod(pod)
+									return
+								}
+
 								log.Printf("New pod detected in cluster %s, scheduling...\n", clusterName)
 
 								if replicaStr, ok := pod.Annotations["proxima-scheduler/replicas"]; ok {
