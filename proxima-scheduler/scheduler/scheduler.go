@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"math"
+	"strconv"
 	"sync"
 	"time"
 
@@ -99,6 +100,32 @@ func (s *Scheduler) Run() {
 							pod := obj.(*v1.Pod)
 							if pod.Spec.SchedulerName == s.SchedulerName && pod.Spec.NodeName == "" {
 								log.Printf("New pod detected in cluster %s, scheduling...\n", clusterName)
+
+								if replicaStr, ok := pod.Annotations["proxima-scheduler/replicas"]; ok {
+									replicas, err := strconv.Atoi(replicaStr)
+									if err != nil {
+										log.Printf("Invalid replicas annotation on pod %s: %v", pod.Name, err)
+									}
+
+									for i := 0; i < replicas; i++ {
+										copy := pod.DeepCopy()
+										copy.ResourceVersion = ""
+										copy.UID = ""
+										copy.Spec.NodeName = ""
+										copy.Name = fmt.Sprintf("%s-%d", pod.Name, i)
+										copy.Annotations["proxima-scheduler/generated-from"] = pod.Name
+										_, err := s.Clientsets["local"].CoreV1().Pods(pod.Namespace).Create(context.TODO(), copy, metav1.CreateOptions{})
+
+										if err != nil {
+											log.Printf("Failed to create replica pod %s: %v", copy.Name, err)
+										} else {
+											log.Printf("Created replica pod %s", copy.Name)
+										}
+									}
+
+									_ = s.Clientsets["local"].CoreV1().Pods(pod.Namespace).Delete(context.TODO(), pod.Name, metav1.DeleteOptions{})
+									return
+								}
 								s.schedulePod(pod)
 							}
 						},
