@@ -119,6 +119,7 @@ func (s *Scheduler) Run() {
 										copy.UID = ""
 										copy.Spec.NodeName = ""
 										copy.Name = fmt.Sprintf("%s-%d", pod.Name, i)
+										copy.Annotations["proxima-scheduler/generated"] = "true"
 										copy.Annotations["proxima-scheduler/generated-from"] = pod.Name
 										_, err := s.Clientsets["local"].CoreV1().Pods(pod.Namespace).Create(context.TODO(), copy, metav1.CreateOptions{})
 
