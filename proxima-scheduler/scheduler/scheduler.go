@@ -282,6 +282,8 @@ func (s *Scheduler) ReconcilePods() {
 							Status:  "Rescheduled",
 						}
 					}
+				} else {
+					log.Printf("Pod %s is on an optimal node.", pod.Name)
 				}
 			}
 		}
