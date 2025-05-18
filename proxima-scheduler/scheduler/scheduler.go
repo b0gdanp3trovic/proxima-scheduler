@@ -2,6 +2,8 @@ package scheduler
 
 import (
 	"context"
+	"crypto/sha1"
+	"encoding/hex"
 	"fmt"
 	"log"
 	"math"
@@ -297,7 +299,7 @@ func (s *Scheduler) ReconcilePods() {
 					newPod.ResourceVersion = ""
 					newPod.UID = ""
 					newPod.Spec.NodeName = nodeName
-					newPod.Name = fmt.Sprintf("%s-rescheduled", pod.Name)
+					newPod.Name = fmt.Sprintf("%s-%s", pod.Name, calculateNewHash(pod.Name))
 
 					_, err = s.Clientsets[bestCluster].CoreV1().Pods(newPod.Namespace).Create(context.TODO(), newPod, metav1.CreateOptions{})
 					if err != nil {
@@ -351,6 +353,13 @@ func (s *Scheduler) bindPodToNode(clientset *kubernetes.Clientset, pod *v1.Pod, 
 	}
 
 	log.Printf("Successfully scheduled pod %s to node %s.\n", pod.GetName(), nodeName)
+}
+
+func calculateNewHash(podName string) string {
+	hasher := sha1.New()
+	hasher.Write([]byte(podName + time.Now().Format(time.RFC3339Nano)))
+	sum := hasher.Sum(nil)
+	return hex.EncodeToString(sum)[:8]
 }
 
 func (s *Scheduler) GetNodeScores() (map[string]map[string]float64, error) {
