@@ -371,6 +371,18 @@ func (ep *EdgeProxy) Run() {
 		log.Println("Edge proxy server is starting on port 8080...")
 		http.Handle("/", preprocessRequest(ep))
 
+		http.HandleFunc("/invalidate/", func(w http.ResponseWriter, r *http.Request) {
+			service := strings.TrimPrefix(r.URL.Path, "/invalidate/")
+			if service == "" {
+				http.Error(w, "Missing service name", http.StatusBadRequest)
+				return
+			}
+
+			ep.invalidateCache(service)
+			log.Printf("Manually invalidated cache for service: %s", service)
+			w.WriteHeader(http.StatusOK)
+		})
+
 		err := http.ListenAndServe(":8080", nil)
 		if err != nil {
 			log.Fatalf("Error starting proxy server: %v", err)
