@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"math/rand"
 	"net/http"
 	"net/http/httputil"
 	"strings"
@@ -21,9 +22,10 @@ type EdgeProxy struct {
 	proxy          *httputil.ReverseProxy
 	consulAddress  string
 	database       util.Database
-	cache          map[string]CachedForwardTarget
 	cacheMutex     sync.RWMutex
 	cacheDuration  time.Duration
+	candidateCache map[string]CachedForwardCandidates
+	rrIndex        map[string]int
 	NodeIP         string
 	ExternalNodeIP string
 	requestCounts  map[string]int
@@ -48,9 +50,15 @@ type ForwardTarget struct {
 	UseProxy    bool
 }
 
-type CachedForwardTarget struct {
-	target     ForwardTarget
+type WeightedForwardTarget struct {
+	Target ForwardTarget
+	Weight float64
+}
+
+type CachedForwardCandidates struct {
+	candidates []WeightedForwardTarget
 	expiration time.Time
+	index      int // for round-robin
 }
 
 type ResponseRecorder struct {
@@ -151,8 +159,9 @@ func NewEdgeProxy(
 		},
 		consulAddress:  consulAddress,
 		database:       db,
-		cache:          make(map[string]CachedForwardTarget),
 		cacheDuration:  cacheDuration,
+		candidateCache: make(map[string]CachedForwardCandidates),
+		rrIndex:        make(map[string]int),
 		NodeIP:         nodeIP,
 		ExternalNodeIP: externalNodeIP,
 		namespace:      "default",
@@ -207,104 +216,91 @@ func getPodsForService(serviceName, namespace string, cluster string, clientset 
 
 func (ep *EdgeProxy) getBestPod(serviceName string) (ForwardTarget, error) {
 	ep.cacheMutex.RLock()
-	// We already have a pod in cache for a given service name
-	// and it's still valid.
-	if cached, found := ep.cache[serviceName]; found && time.Now().Before(cached.expiration) {
+	cached, found := ep.candidateCache[serviceName]
+	if found && time.Now().Before(cached.expiration) && len(cached.candidates) > 0 {
 		ep.cacheMutex.RUnlock()
-		log.Printf("Returning cached pod for service %s", serviceName)
-		return cached.target, nil
+		log.Printf("Returning cached weighted pod for service %s", serviceName)
+		return weightedRandomSelect(cached.candidates), nil
 	}
 	ep.cacheMutex.RUnlock()
 
 	var potentialPods []K8sPodInstance
-
-	localPods, err := getPodsForService(serviceName, ep.namespace, "local", ep.clientsets["local"])
-	if err != nil {
-		return ForwardTarget{}, fmt.Errorf("failed to obtain pods from local cluster: %v", err)
-	}
-
-	potentialPods = append(potentialPods, localPods...)
-
-	if len(potentialPods) == 0 {
-		log.Printf("No pods found in the local cluster. Proceeding to remote clusters.")
-		for clusterName, clientset := range ep.clientsets {
-			if clusterName == "local" {
-				continue
-			}
-
-			pods, err := getPodsForService(serviceName, ep.namespace, clusterName, clientset)
-			if err != nil {
-				log.Printf("Error retrieving pods from cluster %s: %v", clusterName, err)
-				continue
-			}
-			potentialPods = append(potentialPods, pods...)
+	for clusterName, clientset := range ep.clientsets {
+		pods, err := getPodsForService(serviceName, ep.namespace, clusterName, clientset)
+		if err != nil {
+			log.Printf("Error retrieving pods from cluster %s: %v", clusterName, err)
+			continue
 		}
+		potentialPods = append(potentialPods, pods...)
 	}
 
 	if len(potentialPods) == 0 {
-		return ForwardTarget{}, fmt.Errorf("No valid pods found")
+		return ForwardTarget{}, fmt.Errorf("No valid pods found for service %s", serviceName)
 	}
-
-	log.Printf("Found pods: %v", potentialPods)
-	log.Printf("Edge proxy external IP: %v", ep.ExternalNodeIP)
 
 	latenciesByEdge, err := ep.database.GetAverageLatenciesForEdge(ep.ExternalNodeIP)
 	if err != nil {
 		return ForwardTarget{}, fmt.Errorf("failed to retrieve average latencies: %v", err)
 	}
 
-	var bestPod K8sPodInstance
-	var lowestLatency float64
-	latencyFound := false
-
-	log.Printf("Latencies by edge: %v", latenciesByEdge)
+	var weightedTargets []WeightedForwardTarget
 	for _, pod := range potentialPods {
 		latency, exists := latenciesByEdge[pod.NodeIP]
-		if !exists {
-			log.Printf("No latency data available for node %s", pod.NodeIP)
+		if !exists || latency <= 0 {
 			continue
 		}
 
-		if !latencyFound || latency < lowestLatency {
-			lowestLatency = latency
-			bestPod = pod
-			latencyFound = true
+		target := ForwardTarget{Pod: pod}
+		if pod.Cluster == "local" {
+			target.ForwardHost = fmt.Sprintf("%s:%d", pod.PodIP, pod.Port)
+			target.UseProxy = false
+		} else {
+			remoteProxyUrl, err := util.FindEdgeProxyNodePortAddress(ep.clientsets[pod.Cluster], "proxima-scheduler", "edgeproxy-service")
+			if err != nil || remoteProxyUrl == "" {
+				log.Printf("Skipping pod on cluster %s due to missing proxy", pod.Cluster)
+				continue
+			}
+			target.ForwardHost = remoteProxyUrl
+			target.UseProxy = true
 		}
+
+		weight := 1.0 / latency
+		weightedTargets = append(weightedTargets, WeightedForwardTarget{
+			Target: target,
+			Weight: weight,
+		})
 	}
 
-	if !latencyFound {
-		return ForwardTarget{}, fmt.Errorf("no suitable pod found based on latency data")
-	}
-
-	target := ForwardTarget{
-		Pod: bestPod,
-	}
-
-	if bestPod.Cluster == "local" {
-		target.ForwardHost = fmt.Sprintf("%s:%d", bestPod.PodIP, bestPod.Port)
-		target.UseProxy = false
-	} else {
-		// Use remote edge proxy instead of direct pod access
-		remoteProxyUrl, err := util.FindEdgeProxyNodePortAddress(ep.clientsets[bestPod.Cluster], "proxima-scheduler", "edgeproxy-service")
-		if err != nil {
-			return ForwardTarget{}, fmt.Errorf("Error obtaining remote proxy address: %v", err)
-		}
-		if remoteProxyUrl == "" {
-			return ForwardTarget{}, fmt.Errorf("no remote proxy IP available for cluster %s", bestPod.Cluster)
-		}
-		target.ForwardHost = remoteProxyUrl
-		target.UseProxy = true
+	if len(weightedTargets) == 0 {
+		return ForwardTarget{}, fmt.Errorf("No valid weighted targets found for service %s", serviceName)
 	}
 
 	ep.cacheMutex.Lock()
-	ep.cache[serviceName] = CachedForwardTarget{
-		target:     target,
+	ep.candidateCache[serviceName] = CachedForwardCandidates{
+		candidates: weightedTargets,
 		expiration: time.Now().Add(ep.cacheDuration),
 	}
 	ep.cacheMutex.Unlock()
 
-	log.Printf("Selected and cached pod for service %s", serviceName)
-	return target, nil
+	log.Printf("Selected and cached %d candidates for service %s", len(weightedTargets), serviceName)
+	return weightedRandomSelect(weightedTargets), nil
+}
+
+func weightedRandomSelect(pods []WeightedForwardTarget) ForwardTarget {
+	totalWeight := 0.0
+	for _, pod := range pods {
+		totalWeight += pod.Weight
+	}
+
+	r := rand.Float64() * totalWeight
+	for _, pod := range pods {
+		r -= pod.Weight
+		if r <= 0 {
+			return pod.Target
+		}
+	}
+
+	return pods[len(pods)-1].Target
 }
 
 func getLatencyForNode(nodeIP string, averageLatencies map[string]float64) (float64, error) {
@@ -365,7 +361,7 @@ func preprocessRequest(ep *EdgeProxy) http.Handler {
 func (ep *EdgeProxy) invalidateCache(serviceName string) {
 	ep.cacheMutex.Lock()
 	defer ep.cacheMutex.Unlock()
-	delete(ep.cache, serviceName)
+	delete(ep.candidateCache, serviceName)
 	log.Printf("Cache invalidated for service %s", serviceName)
 }
 
