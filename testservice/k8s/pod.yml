@@ -14,3 +14,8 @@ spec:
       image: bogdanb0gdan/test-flask-service:latest
       ports:
         - containerPort: 8080
+  env:
+    - name: POD_NAME
+      valueFrom:
+        fieldRef:
+          fieldPath: metadata.name

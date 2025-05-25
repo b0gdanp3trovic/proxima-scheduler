@@ -33,3 +33,14 @@ jobs:
         tags: |
           bogdanb0gdan/proxima-scheduler:latest
           bogdanb0gdan/proxima-scheduler:${{ github.sha }}
+
+    - name: Build and Push Test Service Docker Image
+      uses: docker/build-push-action@v4
+      with:
+        context: ./testservice
+        file: ./testservice/Dockerfile
+        push: true
+        tags: |
+          bogdanb0gdan/test-flask-service:latest
+          bogdanb0gdan/test-flask-service:${{ github.sha }}
+
