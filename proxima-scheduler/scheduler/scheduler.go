@@ -250,6 +250,11 @@ func (s *Scheduler) ReconcilePods() {
 					continue
 				}
 
+				if pod.DeletionTimestamp != nil {
+					log.Printf("Skipping pod %s because it's being deleted", pod.Name)
+					continue
+				}
+
 				app := pod.Labels["app"]
 				if app == "" {
 					log.Printf("App label not found on pod %v, using unknown.", pod.Name)
