@@ -265,6 +265,7 @@ func (ep *EdgeProxy) getBestPod(serviceName string) (ForwardTarget, error) {
 		}
 
 		weight := 1.0 / latency
+		log.Printf("Weight for %s is %f", target.ForwardHost, weight)
 		weightedTargets = append(weightedTargets, WeightedForwardTarget{
 			Target: target,
 			Weight: weight,
