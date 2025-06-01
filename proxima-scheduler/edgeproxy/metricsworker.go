@@ -25,6 +25,11 @@ type ProxyPodMetrics struct {
 	LastBucket     time.Time
 }
 
+type ProxyPodMetricsData struct {
+	AvgLatency time.Duration
+	AvgRPM     float64
+}
+
 type MetricsWorker struct {
 	metricsChan    chan MetricsData
 	database       util.Database
@@ -166,6 +171,33 @@ func (mw *MetricsWorker) flushMetrics() {
 
 		if len(podMetrics) == 0 {
 			delete(mw.serviceMetrics, serviceName)
+		}
+	}
+
+	var totalRequests int
+	var totalLatency time.Duration
+
+	for _, podMetrics := range mw.serviceMetrics {
+		for _, metrics := range podMetrics {
+			for i := 0; i < len(metrics.RPMBuckets); i++ {
+				totalRequests += metrics.RPMBuckets[i]
+				totalLatency += metrics.LatencyBuckets[i]
+			}
+		}
+	}
+
+	if totalRequests > 0 {
+		avgLatency := totalLatency / time.Duration(totalRequests)
+		avgRPM := float64(totalRequests) / 5.0
+
+		log.Printf("Flushing aggregated metrics for edge proxy %s: total avg latency=%v, total avg RPM=%.2f",
+			mw.hostNodeIP, avgLatency, avgRPM)
+
+		err := mw.database.SaveEdgeProxyMetricsForService("ALL", "ALL", mw.hostNodeIP, avgLatency, avgRPM)
+		if err != nil {
+			log.Printf("Failed to save aggregated metrics for edge proxy %s: %v", mw.hostNodeIP, err)
+		} else {
+			log.Printf("Successfully saved aggregated metrics for edge proxy %s", mw.hostNodeIP)
 		}
 	}
 }
