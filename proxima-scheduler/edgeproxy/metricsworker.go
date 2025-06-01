@@ -84,6 +84,12 @@ func (mw *MetricsWorker) processMetrics() {
 		metrics.LatencyBuckets[metrics.CurrentIndex] += data.Latency
 
 		mw.metricsMutex.Unlock()
+
+		log.Printf("[DEBUG] Received latency data: service=%s, pod=%s, latency=%v",
+			data.ServiceName, data.PodURL, data.Latency)
+
+		log.Printf("[DEBUG] Updated RPMBuckets: %+v", metrics.RPMBuckets)
+		log.Printf("[DEBUG] Updated LatencyBuckets: %+v", metrics.LatencyBuckets)
 	}
 }
 
