@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/b0gdanp3trovic/proxima-scheduler/util"
+	"golang.org/x/sync/singleflight"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -33,6 +34,7 @@ type EdgeProxy struct {
 	clientsets     map[string]*kubernetes.Clientset
 	namespace      string
 	kindNetworkIP  string
+	flightGroup    singleflight.Group
 }
 
 type K8sPodInstance struct {
@@ -166,6 +168,7 @@ func NewEdgeProxy(
 		ExternalNodeIP: externalNodeIP,
 		namespace:      "default",
 		kindNetworkIP:  kindNetworkIP,
+		flightGroup:    singleflight.Group{},
 	}, nil
 }
 
@@ -224,67 +227,76 @@ func (ep *EdgeProxy) getBestPod(serviceName string) (ForwardTarget, error) {
 	}
 	ep.cacheMutex.RUnlock()
 
-	var potentialPods []K8sPodInstance
-	for clusterName, clientset := range ep.clientsets {
-		pods, err := getPodsForService(serviceName, ep.namespace, clusterName, clientset)
-		if err != nil {
-			log.Printf("Error retrieving pods from cluster %s: %v", clusterName, err)
-			continue
-		}
-		potentialPods = append(potentialPods, pods...)
-	}
-
-	if len(potentialPods) == 0 {
-		return ForwardTarget{}, fmt.Errorf("No valid pods found for service %s", serviceName)
-	}
-
-	latenciesByEdge, err := ep.database.GetAverageLatenciesForEdge(ep.ExternalNodeIP)
-	if err != nil {
-		return ForwardTarget{}, fmt.Errorf("failed to retrieve average latencies: %v", err)
-	}
-
-	var weightedTargets []WeightedForwardTarget
-	for _, pod := range potentialPods {
-		latency, exists := latenciesByEdge[pod.NodeIP]
-		if !exists || latency <= 0 {
-			continue
-		}
-
-		target := ForwardTarget{Pod: pod}
-		if pod.Cluster == "local" {
-			target.ForwardHost = fmt.Sprintf("%s:%d", pod.PodIP, pod.Port)
-			target.UseProxy = false
-		} else {
-			remoteProxyUrl, err := util.FindEdgeProxyNodePortAddress(ep.clientsets[pod.Cluster], "proxima-scheduler", "edgeproxy-service")
-			if err != nil || remoteProxyUrl == "" {
-				log.Printf("Skipping pod on cluster %s due to missing proxy", pod.Cluster)
+	result, err, _ := ep.flightGroup.Do(serviceName, func() (interface{}, error) {
+		var potentialPods []K8sPodInstance
+		for clusterName, clientset := range ep.clientsets {
+			pods, err := getPodsForService(serviceName, ep.namespace, clusterName, clientset)
+			if err != nil {
+				log.Printf("Error retrieving pods from cluster %s: %v", clusterName, err)
 				continue
 			}
-			target.ForwardHost = remoteProxyUrl
-			target.UseProxy = true
+			potentialPods = append(potentialPods, pods...)
 		}
 
-		weight := 1.0 / latency
-		log.Printf("Weight for %s is %f", target.ForwardHost, weight)
-		weightedTargets = append(weightedTargets, WeightedForwardTarget{
-			Target: target,
-			Weight: weight,
-		})
+		if len(potentialPods) == 0 {
+			return ForwardTarget{}, fmt.Errorf("No valid pods found for service %s", serviceName)
+		}
+
+		latenciesByEdge, err := ep.database.GetAverageLatenciesForEdge(ep.ExternalNodeIP)
+		if err != nil {
+			return ForwardTarget{}, fmt.Errorf("failed to retrieve average latencies: %v", err)
+		}
+
+		var weightedTargets []WeightedForwardTarget
+		for _, pod := range potentialPods {
+			latency, exists := latenciesByEdge[pod.NodeIP]
+			if !exists || latency <= 0 {
+				continue
+			}
+
+			target := ForwardTarget{Pod: pod}
+			if pod.Cluster == "local" {
+				target.ForwardHost = fmt.Sprintf("%s:%d", pod.PodIP, pod.Port)
+				target.UseProxy = false
+			} else {
+				remoteProxyUrl, err := util.FindEdgeProxyNodePortAddress(ep.clientsets[pod.Cluster], "proxima-scheduler", "edgeproxy-service")
+				if err != nil || remoteProxyUrl == "" {
+					log.Printf("Skipping pod on cluster %s due to missing proxy", pod.Cluster)
+					continue
+				}
+				target.ForwardHost = remoteProxyUrl
+				target.UseProxy = true
+			}
+
+			weight := 1.0 / latency
+			log.Printf("Weight for %s is %f", target.ForwardHost, weight)
+			weightedTargets = append(weightedTargets, WeightedForwardTarget{
+				Target: target,
+				Weight: weight,
+			})
+		}
+
+		if len(weightedTargets) == 0 {
+			return ForwardTarget{}, fmt.Errorf("No valid weighted targets found for service %s", serviceName)
+		}
+
+		ep.cacheMutex.Lock()
+		ep.candidateCache[serviceName] = CachedForwardCandidates{
+			candidates: weightedTargets,
+			expiration: time.Now().Add(ep.cacheDuration),
+		}
+		ep.cacheMutex.Unlock()
+
+		log.Printf("Selected and cached %d candidates for service %s", len(weightedTargets), serviceName)
+		return weightedTargets, nil
+	})
+
+	if err != nil {
+		return ForwardTarget{}, err
 	}
 
-	if len(weightedTargets) == 0 {
-		return ForwardTarget{}, fmt.Errorf("No valid weighted targets found for service %s", serviceName)
-	}
-
-	ep.cacheMutex.Lock()
-	ep.candidateCache[serviceName] = CachedForwardCandidates{
-		candidates: weightedTargets,
-		expiration: time.Now().Add(ep.cacheDuration),
-	}
-	ep.cacheMutex.Unlock()
-
-	log.Printf("Selected and cached %d candidates for service %s", len(weightedTargets), serviceName)
-	return weightedRandomSelect(weightedTargets), nil
+	candidates := result.([]WeightedForwardTarget)
+	return weightedRandomSelect(candidates), nil
 }
 
 func weightedRandomSelect(pods []WeightedForwardTarget) ForwardTarget {
