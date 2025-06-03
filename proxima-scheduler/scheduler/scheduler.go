@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"math"
+	"regexp"
 	"strconv"
 	"sync"
 	"time"
@@ -304,7 +305,7 @@ func (s *Scheduler) ReconcilePods() {
 					newPod.ResourceVersion = ""
 					newPod.UID = ""
 					newPod.Spec.NodeName = nodeName
-					newPod.Name = fmt.Sprintf("%s-%s", pod.Name, calculateNewHash(pod.Name))
+					newPod.Name = withNewHashedName(pod.Name)
 
 					_, err = s.Clientsets[bestCluster].CoreV1().Pods(newPod.Namespace).Create(context.TODO(), newPod, metav1.CreateOptions{})
 					if err != nil {
@@ -358,6 +359,13 @@ func (s *Scheduler) bindPodToNode(clientset *kubernetes.Clientset, pod *v1.Pod, 
 	}
 
 	log.Printf("Successfully scheduled pod %s to node %s.\n", pod.GetName(), nodeName)
+}
+
+var hashSuffix = regexp.MustCompile(`-[a-f0-9]{8}$`)
+
+func withNewHashedName(podName string) string {
+	base := hashSuffix.ReplaceAllString(podName, "")
+	return fmt.Sprintf("%s-%s", base, calculateNewHash(base))
 }
 
 func calculateNewHash(podName string) string {
