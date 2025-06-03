@@ -102,6 +102,8 @@ func (s *Scheduler) Run() {
 						AddFunc: func(obj interface{}) {
 							pod := obj.(*v1.Pod)
 							if pod.Spec.SchedulerName == s.SchedulerName && pod.Spec.NodeName == "" {
+								// Skip generated pod, as this is already a re-schedule.
+								// We avoid infinite scheduling cycles like this.
 								if pod.Annotations["proxima-scheduler/generated"] == "true" {
 									log.Printf("Skipping generated pod %s", pod.Name)
 									s.schedulePod(pod)
@@ -191,6 +193,7 @@ func (s *Scheduler) schedulePod(pod *v1.Pod) {
 	}
 
 	// Remote cluster, perform a deep copy and schedule
+	// Clanky that we need to copy multiple times. TODO - rethink this
 	podCopy := pod.DeepCopy()
 	podCopy.ResourceVersion = ""
 	podCopy.UID = ""
@@ -228,6 +231,10 @@ func (s *Scheduler) schedulePod(pod *v1.Pod) {
 	s.PodMutex.Unlock()
 }
 
+/*
+Function that is performed periodically, update state and check if there is a possible better node for a pod.
+TODO - think about latency limit, decouple this function.
+*/
 func (s *Scheduler) ReconcilePods() {
 	newState := make(TrackedPods)
 	nodeScores, err := s.GetNodeScores()
@@ -270,18 +277,18 @@ func (s *Scheduler) ReconcilePods() {
 					log.Printf("Error obtaining node %s", pod.Spec.NodeName)
 				}
 
-				nodeIP, err := util.GetNodeInternalIP(node)
+				currentNodeIP, err := util.GetNodeInternalIP(node)
 				if err != nil {
 					log.Printf("Error obtaining NodeIP for node %s", pod.Spec.NodeName)
 				}
 
 				newState[app][pod.Name] = PodLocation{
 					Cluster: clusterName,
-					NodeIP:  nodeIP,
+					NodeIP:  currentNodeIP,
 				}
 
 				//TODO: throttle rescheduling
-				currentScore := nodeScores[clusterName][nodeIP]
+				currentScore := nodeScores[clusterName][currentNodeIP]
 				bestIP, bestCluster, err := s.GetNodeIPForSchedule(nodeScores, &pod)
 
 				if err != nil {
@@ -301,6 +308,7 @@ func (s *Scheduler) ReconcilePods() {
 					}
 					nodeName := node.Name
 
+					// Another copy - rethink it ASAP
 					newPod := pod.DeepCopy()
 					newPod.ResourceVersion = ""
 					newPod.UID = ""
@@ -361,6 +369,7 @@ func (s *Scheduler) bindPodToNode(clientset *kubernetes.Clientset, pod *v1.Pod, 
 	log.Printf("Successfully scheduled pod %s to node %s.\n", pod.GetName(), nodeName)
 }
 
+// Regex for stripping out the existing hash we are replacing.
 var hashSuffix = regexp.MustCompile(`-[a-f0-9]{8}$`)
 
 func withNewHashedName(podName string) string {
@@ -389,6 +398,7 @@ func (s *Scheduler) GetNodeScores() (map[string]map[string]float64, error) {
 		for _, node := range nodeList.Items {
 			var nodeIP string
 
+			// We already have a function for this
 			for _, addr := range node.Status.Addresses {
 				if addr.Type == v1.NodeInternalIP {
 					nodeIP = addr.Address
@@ -407,6 +417,7 @@ func (s *Scheduler) GetNodeScores() (map[string]map[string]float64, error) {
 
 func (s *Scheduler) GetNodeIPForSchedule(nodeScores map[string]map[string]float64, pod *v1.Pod) (string, string, error) {
 	// Based on score only
+	// Any other metrics?
 	bestFreeNode := ""
 	bestFreeNodeCluster := ""
 	bestScore := -math.MaxFloat64
