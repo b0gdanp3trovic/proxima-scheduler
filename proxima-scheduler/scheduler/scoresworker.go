@@ -32,20 +32,27 @@ func NewScoresWorker(clientset *kubernetes.Clientset, db *util.InfluxDB, scoring
 	}
 }
 
-func (sw *ScoresWorker) initializeEdgeWeights(nodeLatenciesByEdgeProxy util.EdgeProxyToNodeLatencies) error {
-	numEdges := len(nodeLatenciesByEdgeProxy)
-	if numEdges == 0 {
-		return fmt.Errorf("no edge proxies found")
+func (sw *ScoresWorker) calculateEdgeWeights(nodeLatenciesByEdgeProxy util.EdgeProxyToNodeLatencies) error {
+	rpmByEdge, err := sw.Db.GetTotalRPMByEdgeProxy()
+	if err != nil {
+		return fmt.Errorf("failed to get RPM data: %w", err)
 	}
 
-	equalWeight := 1.0 / float64(numEdges)
+	if len(rpmByEdge) == 0 {
+		return fmt.Errorf("no RPM data found for edge proxies")
+	}
 
-	for edgeProxy := range nodeLatenciesByEdgeProxy {
-		sw.EdgeWeights[edgeProxy] = equalWeight
+	var totalRPM float64
+	for _, rpm := range rpmByEdge {
+		totalRPM += rpm
+	}
+
+	for edgeProxy, rpm := range rpmByEdge {
+		sw.EdgeWeights[edgeProxy] = rpm / totalRPM
 	}
 
 	sw.EdgeWeightsInitialized = true
-	log.Printf("Edge weights initialized: %v\n", sw.EdgeWeights)
+	log.Printf("Edge weights initialized based on RPM: %v\n", sw.EdgeWeights)
 	return nil
 }
 
@@ -58,7 +65,7 @@ func (sw *ScoresWorker) scoreNodes() {
 	log.Printf("Fetched node latencies by edge proxy: %v\n", nodeLatenciesByEdgeProxy)
 
 	if !sw.EdgeWeightsInitialized {
-		if err := sw.initializeEdgeWeights(nodeLatenciesByEdgeProxy); err != nil {
+		if err := sw.calculateEdgeWeights(nodeLatenciesByEdgeProxy); err != nil {
 			log.Printf("Error initializing edge weights: %v\n", err)
 			return
 		}

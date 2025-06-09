@@ -24,6 +24,7 @@ type Database interface {
 	SaveRequestLatency(podURL string, nodeIP string, edgeproxyNodeIP string, latency time.Duration) error
 	SaveNodeScores(scores map[string]float64) error
 	GetLatency(source, destination string) (time.Duration, error)
+	GetTotalRPMByEdgeProxy() (map[string]float64, error)
 }
 
 type InfluxDB struct {
@@ -392,4 +393,43 @@ func (db *InfluxDB) GetLatency(source, destination string) (time.Duration, error
 	}
 
 	return 0, fmt.Errorf("no latency data found for %s -> %s", source, destination)
+}
+
+func (db *InfluxDB) GetTotalRPMByEdgeProxy() (map[string]float64, error) {
+	query := fmt.Sprintf(`
+		from(bucket: "%s")
+		|> range(start: -5m)
+		|> filter(fn: (r) => r._measurement == "edge_proxy_service_metrics")
+		|> filter(fn: (r) => r._field == "avg_rpm")
+		|> group(columns: ["edge_proxy"])
+		|> sum()
+	`, db.Bucket)
+
+	result, err := db.QueryAPI.Query(context.Background(), query)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query RPM data: %w", err)
+	}
+
+	rpmByEdge := make(map[string]float64)
+	for result.Next() {
+		edgeProxy, ok := result.Record().ValueByKey("edge_proxy").(string)
+		if !ok {
+			log.Printf("Failed to parse edge_proxy tag in record: %+v", result.Record())
+			continue
+		}
+
+		rpmSum, ok := result.Record().Value().(float64)
+		if !ok {
+			log.Printf("Failed to parse rpm value in record: %+v", result.Record())
+			continue
+		}
+
+		rpmByEdge[edgeProxy] = rpmSum
+	}
+
+	if result.Err() != nil {
+		return nil, fmt.Errorf("query result error: %w", result.Err())
+	}
+
+	return rpmByEdge, nil
 }
