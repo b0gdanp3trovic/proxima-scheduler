@@ -41,11 +41,12 @@ spec:
         - name: SCORING_INTERVAL
           value: "30s"
         - name: EDGE_PROXIES
-          value: "172.19.0.5"
+          value: "172.18.0.10,172.18.0.7"
         - name: INCLUDED_NAMESPACES
           value: "default"
         - name: INFLUXDB_ADDRESS
-          value: "http://influxdb:8086"
+          # actual address of the container inside docker network
+          value: "http://172.19.0.6:8086"
         - name: INFLUXDB_TOKEN
           valueFrom:
             secretKeyRef:

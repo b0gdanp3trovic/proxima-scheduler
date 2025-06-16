@@ -39,15 +39,18 @@ spec:
         - name: DATABASE_ENABLED
           value: "true"
         - name: INFLUXDB_ADDRESS
-          value: "http://influxdb:8086"
+          # actual address of the container inside docker network
+          value: "http://172.19.0.6:8086"
         - name: INFLUXDB_TOKEN
           valueFrom:
             secretKeyRef:
               name: influxdb-auth-token
               key: INFLUXDB_TOKEN
         # used on Kind cluster locally
+        #- name: KIND_NETWORK_IP
+        #  value: "172.18.0.10"
         - name: KIND_NETWORK_IP
-          value: "172.19.0.5"
+          value: "172.18.0.7"
         - name: NODE_IP
           valueFrom:
             fieldRef:

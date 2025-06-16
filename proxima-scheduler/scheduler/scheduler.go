@@ -396,6 +396,11 @@ func (s *Scheduler) GetNodeScores() (map[string]map[string]float64, error) {
 		nodeScores[clusterName] = make(map[string]float64)
 
 		for _, node := range nodeList.Items {
+			if !isNodeReady(&node) || !isSchedulable(&node) {
+				log.Printf("Skipping node %s in cluster %s (NotReady or tainted)", node.Name, clusterName)
+				continue
+			}
+
 			var nodeIP string
 
 			// We already have a function for this
@@ -437,4 +442,22 @@ func (s *Scheduler) GetNodeIPForSchedule(nodeScores map[string]map[string]float6
 	}
 
 	return bestFreeNode, bestFreeNodeCluster, nil
+}
+
+func isNodeReady(node *v1.Node) bool {
+	for _, condition := range node.Status.Conditions {
+		if condition.Type == v1.NodeReady {
+			return condition.Status == v1.ConditionTrue
+		}
+	}
+	return false
+}
+
+func isSchedulable(node *v1.Node) bool {
+	for _, taint := range node.Spec.Taints {
+		if taint.Effect == v1.TaintEffectNoSchedule {
+			return false
+		}
+	}
+	return true
 }
