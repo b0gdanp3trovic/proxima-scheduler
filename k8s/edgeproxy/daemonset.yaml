@@ -46,11 +46,12 @@ spec:
             secretKeyRef:
               name: influxdb-auth-token
               key: INFLUXDB_TOKEN
-        # used on Kind cluster locally
+        # used on Kind cluster locally,
+        # the ip of the Node, needed for edgeproxy + pinger
         #- name: KIND_NETWORK_IP
-        #  value: "172.18.0.10"
+        #  value: "172.19.0.4"
         - name: KIND_NETWORK_IP
-          value: "172.18.0.7"
+          value: "172.19.0.3"
         - name: NODE_IP
           valueFrom:
             fieldRef:
