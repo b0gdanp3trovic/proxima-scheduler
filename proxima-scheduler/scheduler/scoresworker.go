@@ -75,6 +75,10 @@ func (sw *ScoresWorker) initializeEqualEdgeWeights(nodeLatenciesByEdgeProxy util
 
 	sw.EdgeWeightsInitialized = true
 	log.Printf("Edge weights initialized equally: %v\n", sw.EdgeWeights)
+	if err := sw.Db.SaveEdgeProxyWeights(sw.EdgeWeights); err != nil {
+		log.Printf("Failed to save edge proxy weights: %v", err)
+	}
+
 	return nil
 }
 
