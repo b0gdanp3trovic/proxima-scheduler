@@ -11,24 +11,22 @@ import (
 )
 
 type ScoresWorker struct {
-	Clientset              *kubernetes.Clientset
-	Scores                 map[string]float64
-	EdgeWeights            map[string]float64
-	EdgeWeightsInitialized bool
-	Db                     util.Database
-	ScoringInterval        time.Duration
-	EdgeProxies            []string
+	Clientset       *kubernetes.Clientset
+	Scores          map[string]float64
+	EdgeWeights     map[string]float64
+	Db              util.Database
+	ScoringInterval time.Duration
+	EdgeProxies     []string
 }
 
 func NewScoresWorker(clientset *kubernetes.Clientset, db *util.InfluxDB, scoringInterval time.Duration, edgeProxies []string) *ScoresWorker {
 	return &ScoresWorker{
-		Clientset:              clientset,
-		Scores:                 make(map[string]float64),
-		EdgeWeights:            make(map[string]float64),
-		EdgeWeightsInitialized: false,
-		Db:                     db,
-		ScoringInterval:        scoringInterval,
-		EdgeProxies:            edgeProxies,
+		Clientset:       clientset,
+		Scores:          make(map[string]float64),
+		EdgeWeights:     make(map[string]float64),
+		Db:              db,
+		ScoringInterval: scoringInterval,
+		EdgeProxies:     edgeProxies,
 	}
 }
 
@@ -52,7 +50,6 @@ func (sw *ScoresWorker) calculateEdgeWeights(nodeLatenciesByEdgeProxy util.EdgeP
 		sw.EdgeWeights[edgeProxy] = rpm / totalRPM
 	}
 
-	sw.EdgeWeightsInitialized = true
 	log.Printf("Edge weights initialized based on RPM: %v\n", sw.EdgeWeights)
 
 	if err := sw.Db.SaveEdgeProxyWeights(sw.EdgeWeights); err != nil {
@@ -73,7 +70,6 @@ func (sw *ScoresWorker) initializeEqualEdgeWeights(nodeLatenciesByEdgeProxy util
 		sw.EdgeWeights[edgeProxy] = equalWeight
 	}
 
-	sw.EdgeWeightsInitialized = true
 	log.Printf("Edge weights initialized equally: %v\n", sw.EdgeWeights)
 	if err := sw.Db.SaveEdgeProxyWeights(sw.EdgeWeights); err != nil {
 		log.Printf("Failed to save edge proxy weights: %v", err)
@@ -90,11 +86,9 @@ func (sw *ScoresWorker) scoreNodes() {
 	}
 	log.Printf("Fetched node latencies by edge proxy: %v\n", nodeLatenciesByEdgeProxy)
 
-	if !sw.EdgeWeightsInitialized {
-		if err := sw.calculateEdgeWeights(nodeLatenciesByEdgeProxy); err != nil {
-			log.Printf("Error initializing edge weights: %v\n", err)
-			return
-		}
+	if err := sw.calculateEdgeWeights(nodeLatenciesByEdgeProxy); err != nil {
+		log.Printf("Error initializing edge weights: %v\n", err)
+		return
 	}
 
 	weightedLatencies := make(map[string]float64)
