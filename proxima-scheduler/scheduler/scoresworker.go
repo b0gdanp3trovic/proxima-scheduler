@@ -122,7 +122,8 @@ func (sw *ScoresWorker) scoreNodes() {
 	for nodeIP, weightedLatency := range weightedLatencies {
 		finalLatency := weightedLatency / weightSums[nodeIP]
 
-		score := 1.0 / (1.0 + math.Exp(0.001*(finalLatency-Lmin)))
+		// Sigmoid
+		score := 1.0 / (1.0 + math.Exp(0.007*(finalLatency-Lmin)))
 		sw.Scores[nodeIP] = score
 
 		log.Printf("Node %s - Latency: %.2f ms, Score: %.4f\n", nodeIP, finalLatency, sw.Scores[nodeIP])
