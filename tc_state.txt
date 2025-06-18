@@ -1,0 +1,1 @@
+proxima1-worker <-> proxima2-worker: 1000ms

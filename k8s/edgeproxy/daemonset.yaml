@@ -40,7 +40,7 @@ spec:
           value: "true"
         - name: INFLUXDB_ADDRESS
           # actual address of the container inside docker network
-          value: "http://172.19.0.6:8086"
+          value: "http://172.19.0.7:8086"
         - name: INFLUXDB_TOKEN
           valueFrom:
             secretKeyRef:
@@ -48,10 +48,10 @@ spec:
               key: INFLUXDB_TOKEN
         # used on Kind cluster locally,
         # the ip of the Node, needed for edgeproxy + pinger
-        #- name: KIND_NETWORK_IP
-        #  value: "172.19.0.4"
         - name: KIND_NETWORK_IP
-          value: "172.19.0.3"
+          value: "172.19.0.2"
+        #- name: KIND_NETWORK_IP
+        #  value: "172.19.0.5"
         - name: NODE_IP
           valueFrom:
             fieldRef:
