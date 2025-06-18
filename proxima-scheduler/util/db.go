@@ -25,6 +25,7 @@ type Database interface {
 	SaveNodeScores(scores map[string]float64) error
 	GetLatency(source, destination string) (time.Duration, error)
 	GetTotalRPMByEdgeProxy() (map[string]float64, error)
+	SaveEdgeProxyWeights(weights map[string]float64) error
 }
 
 type InfluxDB struct {
@@ -432,4 +433,24 @@ func (db *InfluxDB) GetTotalRPMByEdgeProxy() (map[string]float64, error) {
 	}
 
 	return rpmByEdge, nil
+}
+
+func (db *InfluxDB) SaveEdgeProxyWeights(weights map[string]float64) error {
+	for edgeProxy, weight := range weights {
+		point := influxdb2.NewPoint(
+			"edge_proxy_weights",
+			map[string]string{
+				"edge_proxy": edgeProxy,
+			},
+			map[string]interface{}{
+				"weight": weight,
+			},
+			time.Now(),
+		)
+
+		db.WriteAPI.WritePoint(point)
+	}
+
+	db.WriteAPI.Flush()
+	return nil
 }
