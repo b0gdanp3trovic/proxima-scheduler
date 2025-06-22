@@ -333,7 +333,7 @@ func (s *Scheduler) ReconcilePods() {
 						}
 					}
 				} else {
-					log.Printf("Pod %s is on an optimal node.", pod.Name)
+					log.Printf("Pod %s is on an optimal node: - %s", pod.Name, pod.Spec.NodeName)
 				}
 			}
 		}

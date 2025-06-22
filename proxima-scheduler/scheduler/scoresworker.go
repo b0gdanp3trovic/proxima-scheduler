@@ -136,7 +136,7 @@ func (sw *ScoresWorker) scoreNodes() {
 		score := 1.0 / (1.0 + math.Exp(0.0025*(finalLatency-Lmin)))
 		sw.Scores[nodeIP] = score
 
-		log.Printf("Node %s - Latency: %.2f ms, Score: %.4f\n", nodeIP, finalLatency, sw.Scores[nodeIP])
+		log.Printf("Node %s Score: %.4f\n", nodeIP, sw.Scores[nodeIP])
 	}
 
 	err = sw.Db.SaveNodeScores(sw.Scores)
