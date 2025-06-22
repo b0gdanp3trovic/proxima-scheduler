@@ -25,7 +25,7 @@ func main() {
 	influxClient := influxdb2.NewClient(cfg.InfluxDBAddress, cfg.InfluxDBToken)
 	influxDb := util.NewInfluxDB(influxClient, "proxima", "proxima")
 
-	latencyWorker := edgeproxy.NewMetricsWorker(100, influxDb, cfg.NodeIP, 1*time.Minute)
+	latencyWorker := edgeproxy.NewMetricsWorker(100, influxDb, cfg.NodeIP, cfg.KindNetworkIP, 1*time.Minute)
 	latencyWorker.Start()
 
 	// TODO - change

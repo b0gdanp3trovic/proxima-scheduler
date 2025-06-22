@@ -34,6 +34,7 @@ type MetricsWorker struct {
 	metricsChan    chan MetricsData
 	database       util.Database
 	hostNodeIP     string
+	kindNetworkIP  string
 	serviceMetrics map[string]map[string]*ProxyPodMetrics
 	metricsMutex   sync.Mutex
 	flushInterval  time.Duration
@@ -45,11 +46,12 @@ func (mw *MetricsWorker) Start() {
 	go mw.periodicFlush()
 }
 
-func NewMetricsWorker(bufferSize int, db util.Database, hostNodeIP string, flushInterval time.Duration) *MetricsWorker {
+func NewMetricsWorker(bufferSize int, db util.Database, hostNodeIP string, kindNetworkIP string, flushInterval time.Duration) *MetricsWorker {
 	return &MetricsWorker{
 		metricsChan:    make(chan MetricsData, bufferSize),
 		database:       db,
 		hostNodeIP:     hostNodeIP,
+		kindNetworkIP:  kindNetworkIP,
 		serviceMetrics: make(map[string]map[string]*ProxyPodMetrics),
 		flushInterval:  flushInterval,
 	}
@@ -152,12 +154,7 @@ func (mw *MetricsWorker) flushMetrics() {
 			log.Printf("Flushing metrics for service: %s, pod: %s, avg latency: %v, avg RPM: %.2f",
 				serviceName, podURL, avgLatency, avgRPM)
 
-			err := mw.database.SaveEdgeProxyMetricsForService(serviceName, podURL, mw.hostNodeIP, avgLatency, avgRPM)
-			if err != nil {
-				log.Printf("Failed to save metrics for service: %s, pod: %s, error: %v", serviceName, podURL, err)
-			} else {
-				log.Printf("Successfully saved metrics for service: %s, pod: %s", serviceName, podURL)
-			}
+			mw.saveEdgeProxyMetrics(serviceName, podURL, mw.hostNodeIP, mw.kindNetworkIP, avgLatency, avgRPM)
 
 			metrics.CurrentIndex = (metrics.CurrentIndex + 1) % len(metrics.RPMBuckets)
 			metrics.RPMBuckets[metrics.CurrentIndex] = 0
@@ -193,12 +190,7 @@ func (mw *MetricsWorker) flushMetrics() {
 		log.Printf("Flushing aggregated metrics for edge proxy %s: total avg latency=%v, total avg RPM=%.2f",
 			mw.hostNodeIP, avgLatency, avgRPM)
 
-		err := mw.database.SaveEdgeProxyMetricsForService("ALL", "ALL", mw.hostNodeIP, avgLatency, avgRPM)
-		if err != nil {
-			log.Printf("Failed to save aggregated metrics for edge proxy %s: %v", mw.hostNodeIP, err)
-		} else {
-			log.Printf("Successfully saved aggregated metrics for edge proxy %s", mw.hostNodeIP)
-		}
+		mw.saveEdgeProxyMetrics("ALL", "ALL", mw.hostNodeIP, mw.kindNetworkIP, avgLatency, avgRPM)
 	}
 }
 
@@ -207,5 +199,30 @@ func (mw *MetricsWorker) SendLatencyData(data MetricsData) {
 	case mw.metricsChan <- data:
 	default:
 		log.Printf("Latency channel full, dropping data: %v", data)
+	}
+}
+
+func (mw *MetricsWorker) saveEdgeProxyMetrics(
+	serviceName string,
+	podURL string,
+	host string,
+	kindHost string,
+	avgLatency time.Duration,
+	avgRPM float64,
+) {
+	if kindHost == "" {
+		err := mw.database.SaveEdgeProxyMetricsForService(serviceName, podURL, host, avgLatency, avgRPM)
+		if err != nil {
+			log.Printf("Failed to save aggregated metrics for edge proxy %s: %v", host, err)
+		} else {
+			log.Printf("Successfully saved aggregated metrics for edge proxy %s", host)
+		}
+	} else {
+		err := mw.database.SaveEdgeProxyMetricsForService(serviceName, podURL, kindHost, avgLatency, avgRPM)
+		if err != nil {
+			log.Printf("Failed to save aggregated metrics for edge proxy %s: %v", kindHost, err)
+		} else {
+			log.Printf("Successfully saved aggregated metrics for edge proxy %s", kindHost)
+		}
 	}
 }

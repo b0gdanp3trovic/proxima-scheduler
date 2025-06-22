@@ -32,7 +32,7 @@ func NewScoresWorker(clientset *kubernetes.Clientset, db *util.InfluxDB, scoring
 
 func (sw *ScoresWorker) calculateEdgeWeights(nodeLatenciesByEdgeProxy util.EdgeProxyToNodeLatencies) error {
 	log.Printf("Edge proxies: %v", sw.EdgeProxies)
-	rpmByEdge, err := sw.Db.GetTotalRPMByEdgeProxy()
+	rpmByEdge, err := sw.Db.GetAggregatedRPMByEdgeProxy()
 	if err != nil || len(rpmByEdge) == 0 {
 		log.Printf("Warning: using equal weights due to missing or failed RPM data: %v", err)
 		return sw.initializeEqualEdgeWeights(nodeLatenciesByEdgeProxy)
