@@ -48,10 +48,10 @@ spec:
               key: INFLUXDB_TOKEN
         # used on Kind cluster locally,
         # the ip of the Node, needed for edgeproxy + pinger
-        #- name: KIND_NETWORK_IP
-        #  value: "proxima1-worker"
         - name: KIND_NETWORK_IP
-          value: "proxima2-worker"
+          value: "proxima1-worker"
+        #- name: KIND_NETWORK_IP
+        #  value: "proxima2-worker"
         - name: NODE_IP
           valueFrom:
             fieldRef:

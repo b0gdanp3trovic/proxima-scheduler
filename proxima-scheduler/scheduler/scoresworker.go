@@ -48,7 +48,13 @@ func (sw *ScoresWorker) calculateEdgeWeights(nodeLatenciesByEdgeProxy util.EdgeP
 	}
 
 	for edgeProxy, rpm := range rpmByEdge {
-		sw.EdgeWeights[edgeProxy] = rpm / totalRPM
+		newWeight := rpm / totalRPM
+		prevWeight := sw.EdgeWeights[edgeProxy]
+
+		// TEST THIS OUT!
+		alpha := 0.2
+
+		sw.EdgeWeights[edgeProxy] = alpha*newWeight + (1-alpha)*prevWeight
 	}
 
 	log.Printf("Edge weights initialized based on RPM: %v\n", sw.EdgeWeights)
