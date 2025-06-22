@@ -40,10 +40,11 @@ spec:
               fieldPath: status.hostIP
         # used on Kind cluster locally,
         # the ip of the Node, needed for edgeproxy + pinger
-        - name: KIND_NETWORK_IP
-          value: "172.19.0.2"
         #- name: KIND_NETWORK_IP
-        #  value: "172.19.0.5"
+        #  value: "proxima1-worker"
+        - name: KIND_NETWORK_IP
+          value: "proxima2-worker"
+        - name: NODE_IP
         - name: DATABASE_ENABLED
           value: "true"
         - name: PING_INTERVAL
@@ -62,6 +63,6 @@ spec:
         #  value: "172.104.148.76,74.207.233.55"
         - name: EDGE_PROXIES
           # proxima1-worker, proxima2-worker inside kindinfra network
-          value: "172.19.0.5,172.19.0.2"
+          value: "proxima1-worker,proxima2-worker"
       serviceAccountName: pinger-sa
       restartPolicy: Always

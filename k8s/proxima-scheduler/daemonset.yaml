@@ -42,7 +42,7 @@ spec:
           value: "10s"
         - name: EDGE_PROXIES
           # proxima1-worker, proxima2-worker inside kindinfra network
-          value: "172.19.0.5,172.19.0.2"
+          value: "proxima1-worker,proxima2-worker"
         - name: INCLUDED_NAMESPACES
           value: "default"
         - name: INFLUXDB_ADDRESS
