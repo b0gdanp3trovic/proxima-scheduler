@@ -142,6 +142,12 @@ func NewEdgeProxy(
 				req.URL.Host = targetUrl
 			},
 			ModifyResponse: func(resp *http.Response) error {
+				if resp.Request.Header.Get("X-Proxima-Forwarded") == "true" {
+					// Skip recording metrics for forwarded requests.
+					// These metrics should be recorded by source edge proxies.
+					return nil
+				}
+
 				// Measure latency and log it
 				latency := time.Since(resp.Request.Context().Value("start_time").(time.Time))
 				podUrl := resp.Request.Context().Value("target_url").(string)
@@ -350,6 +356,7 @@ func preprocessRequest(ep *EdgeProxy) http.Handler {
 
 		if target.UseProxy {
 			r.URL.Path = "/" + serviceName + r.URL.Path
+			r.Header.Set("X-Proxima-Forwarded", "true")
 		}
 
 		ctx := r.Context()
