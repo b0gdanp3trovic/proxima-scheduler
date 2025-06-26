@@ -264,7 +264,7 @@ func (ep *EdgeProxy) getBestPod(serviceName string) (ForwardTarget, error) {
 					log.Printf("Skipping pod on cluster %s due to missing proxy: %v", pod.Cluster, err)
 					continue
 				}
-				target.ForwardHost = fmt.Sprintf("%s:30080?", remoteProxyUrl)
+				target.ForwardHost = fmt.Sprintf("%s:30080", remoteProxyUrl)
 				target.UseProxy = true
 			}
 
