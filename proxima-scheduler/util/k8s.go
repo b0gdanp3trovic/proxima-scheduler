@@ -257,13 +257,19 @@ func FindEdgeProxyNodePortAddress(clientset *kubernetes.Clientset, namespace, se
 		return "", fmt.Errorf("failed to list nodes: %w", err)
 	}
 
-	for _, node := range nodes.Items {
-		for _, addr := range node.Status.Addresses {
-			if addr.Type == v1.NodeExternalIP {
-				return fmt.Sprintf("%s:%d", addr.Address, nodePort), nil
-			}
-		}
+	if len(nodes.Items) == 0 {
+		return "", fmt.Errorf("no edge node found")
 	}
 
-	return "", fmt.Errorf("no edge node with ExternalIP found")
+	return nodes.Items[0].Name, nil
+
+	//for _, node := range nodes.Items {
+	//	for _, addr := range node.Status.Addresses {
+	//		if addr.Type == v1.NodeExternalIP {
+	//			return fmt.Sprintf("%s:%d", addr.Address, nodePort), nil
+	//		}
+	//	}
+	//}
+	//
+	//return "", fmt.Errorf("no edge node with ExternalIP found")
 }
