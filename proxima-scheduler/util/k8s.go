@@ -261,6 +261,7 @@ func FindEdgeProxyNodePortAddress(clientset *kubernetes.Clientset, namespace, se
 		return "", fmt.Errorf("no edge node found")
 	}
 
+	// Return just the name for now
 	return nodes.Items[0].Name, nil
 
 	//for _, node := range nodes.Items {
