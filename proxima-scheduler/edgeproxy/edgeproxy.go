@@ -261,7 +261,7 @@ func (ep *EdgeProxy) getBestPod(serviceName string) (ForwardTarget, error) {
 			} else {
 				remoteProxyUrl, err := util.FindEdgeProxyNodePortAddress(ep.clientsets[pod.Cluster], "proxima-scheduler", "edgeproxy-service")
 				if err != nil || remoteProxyUrl == "" {
-					log.Printf("Skipping pod on cluster %s due to missing proxy", pod.Cluster)
+					log.Printf("Skipping pod on cluster %s due to missing proxy: %v", pod.Cluster, err)
 					continue
 				}
 				target.ForwardHost = remoteProxyUrl
