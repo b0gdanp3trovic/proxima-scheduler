@@ -9,7 +9,6 @@ import (
 	"math"
 	"regexp"
 	"strconv"
-	"sync"
 	"time"
 
 	"github.com/b0gdanp3trovic/proxima-scheduler/util"
@@ -20,14 +19,6 @@ import (
 	"k8s.io/client-go/tools/cache"
 )
 
-type PodLocation struct {
-	Cluster string
-	NodeIP  string
-	Status  string
-}
-
-type TrackedPods map[string]map[string]PodLocation
-
 type Scheduler struct {
 	Clientsets         map[string]*kubernetes.Clientset
 	SchedulerName      string
@@ -36,8 +27,6 @@ type Scheduler struct {
 	DB                 util.Database
 	ScheduledPods      map[string]map[string]string
 	EdgeProxies        []string
-	TrackedPods        TrackedPods
-	PodMutex           sync.RWMutex
 }
 
 type nodeScorePair struct {
@@ -76,7 +65,6 @@ func NewScheduler(
 		StopCh:             make(chan struct{}),
 		DB:                 db,
 		EdgeProxies:        edgeProxies,
-		TrackedPods:        make(TrackedPods),
 	}, nil
 }
 
@@ -218,17 +206,6 @@ func (s *Scheduler) schedulePod(pod *v1.Pod) {
 	if app == "" {
 		app = "unknown"
 	}
-
-	s.PodMutex.Lock()
-	if _, ok := s.TrackedPods[app]; !ok {
-		s.TrackedPods[app] = make(map[string]PodLocation)
-	}
-	s.TrackedPods[app][podCopy.Name] = PodLocation{
-		Cluster: targetCluster,
-		NodeIP:  targetNodeIP,
-		Status:  "Scheduled",
-	}
-	s.PodMutex.Unlock()
 }
 
 /*
@@ -236,12 +213,13 @@ Function that is performed periodically, update state and check if there is a po
 TODO - think about latency limit, decouple this function.
 */
 func (s *Scheduler) ReconcilePods() {
-	newState := make(TrackedPods)
 	nodeScores, err := s.GetNodeScores()
 	if err != nil {
 		log.Printf("Failed to get node scores during reconciliation: %v", err)
 		return
 	}
+
+	edgeToLatencies := s.obtainEdgeNodeLatencies()
 
 	for clusterName, clientset := range s.Clientsets {
 		for _, namespace := range s.IncludedNamespaces {
@@ -254,6 +232,17 @@ func (s *Scheduler) ReconcilePods() {
 			}
 
 			for _, pod := range pods.Items {
+				limitStr, hasLimit := pod.Annotations["proxima-scheduler/latency_limit"]
+				var latencyLimit time.Duration
+				if hasLimit {
+					var err error
+					latencyLimit, err = time.ParseDuration(limitStr)
+					if err != nil {
+						log.Printf("Invalid latency_limit annotation on pod %s: %v", pod.Name, err)
+						hasLimit = false
+					}
+				}
+
 				if pod.Spec.NodeName == "" {
 					continue
 				}
@@ -268,10 +257,6 @@ func (s *Scheduler) ReconcilePods() {
 					log.Printf("App label not found on pod %v, using unknown.", pod.Name)
 				}
 
-				if _, ok := newState[app]; !ok {
-					newState[app] = make(map[string]PodLocation)
-				}
-
 				node, err := clientset.CoreV1().Nodes().Get(context.TODO(), pod.Spec.NodeName, metav1.GetOptions{})
 				if err != nil {
 					log.Printf("Error obtaining node %s", pod.Spec.NodeName)
@@ -282,9 +267,65 @@ func (s *Scheduler) ReconcilePods() {
 					log.Printf("Error obtaining NodeIP for node %s", pod.Spec.NodeName)
 				}
 
-				newState[app][pod.Name] = PodLocation{
-					Cluster: clusterName,
-					NodeIP:  currentNodeIP,
+				if hasLimit {
+					meetsLimit := true
+
+					for edgeProxy, latencies := range edgeToLatencies {
+						latencyMs, ok := latencies[currentNodeIP]
+
+						if !ok {
+							log.Printf("Pod %s: missing latency data from edge %s to node %s", pod.Name, edgeProxy, currentNodeIP)
+							meetsLimit = false
+							break
+						}
+
+						latencyDuration := time.Duration(latencyMs * float64(time.Millisecond))
+						if latencyDuration > latencyLimit {
+							log.Printf("Pod %s: current node exceeds latency limit from edge %s: %v>%v",
+								pod.Name, edgeProxy, latencyDuration, latencyLimit)
+							meetsLimit = false
+							break
+						}
+					}
+
+					if !meetsLimit {
+						log.Printf("Pod %s no longer meets latency constraint, rescheduling...", pod.Name)
+
+						bestIP, bestCluster, err := s.GetNodeIPForSchedule(nodeScores, &pod)
+						if err != nil {
+							log.Printf("Error finding new node for pod %s: %v", pod.Name, err)
+							continue
+						}
+
+						bestNode, err := util.GetNodeByInternalIP(s.Clientsets[bestCluster], bestIP)
+						if err != nil {
+							log.Printf("Failed to get node object for IP %s: %v", bestIP, err)
+							continue
+						}
+						nodeName := bestNode.Name
+
+						newPod := pod.DeepCopy()
+						newPod.ResourceVersion = ""
+						newPod.UID = ""
+						newPod.Spec.NodeName = nodeName
+						newPod.Name = withNewHashedName(pod.Name)
+
+						_, err = s.Clientsets[bestCluster].CoreV1().Pods(newPod.Namespace).Create(context.TODO(), newPod, metav1.CreateOptions{})
+						if err != nil {
+							log.Printf("Failed to create rescheduled pod %s in cluster %s: %v", newPod.Name, bestCluster, err)
+							continue
+						}
+
+						err = clientset.CoreV1().Pods(pod.Namespace).Delete(context.TODO(), pod.Name, metav1.DeleteOptions{})
+						if err != nil {
+							log.Printf("Failed to delete original pod %s: %v", pod.Name, err)
+						} else {
+							log.Printf("Rescheduled pod %s to node %s (%s) due to latency SLO violation.", pod.Name, nodeName, bestCluster)
+						}
+
+						// Don't continue with the rescheduling
+						continue
+					}
 				}
 
 				//TODO: throttle rescheduling
@@ -326,11 +367,6 @@ func (s *Scheduler) ReconcilePods() {
 						log.Printf("Failed to delete original pod %s from cluster %s: %v", pod.Name, clusterName, err)
 					} else {
 						log.Printf("Successfully rescheduled pod %s to %s (%s)", pod.Name, nodeName, bestCluster)
-						newState[app][newPod.Name] = PodLocation{
-							Cluster: bestCluster,
-							NodeIP:  bestIP,
-							Status:  "Rescheduled",
-						}
 					}
 				} else {
 					log.Printf("Pod %s is on an optimal node: - %s", pod.Name, pod.Spec.NodeName)
@@ -338,13 +374,6 @@ func (s *Scheduler) ReconcilePods() {
 			}
 		}
 	}
-
-	s.PodMutex.Lock()
-	s.TrackedPods = newState
-	s.PodMutex.Unlock()
-
-	log.Printf("Updated pod state. %d apps being tracked.", len(newState))
-	log.Printf("Current state: %v", newState)
 }
 
 func (s *Scheduler) bindPodToNode(clientset *kubernetes.Clientset, pod *v1.Pod, nodeName string) {
@@ -421,6 +450,19 @@ func (s *Scheduler) GetNodeScores() (map[string]map[string]float64, error) {
 }
 
 func (s *Scheduler) GetNodeIPForSchedule(nodeScores map[string]map[string]float64, pod *v1.Pod) (string, string, error) {
+	limitStr, hasLimit := pod.Annotations["proxima-scheduler/latency_limit"]
+	var latencyLimit time.Duration
+	if hasLimit {
+		var err error
+		latencyLimit, err = time.ParseDuration(limitStr)
+		if err != nil {
+			log.Printf("Invalid latency_limit annotation on pod %s: %v", pod.Name, err)
+			return "", "", fmt.Errorf("invalid latency_limit: %w", err)
+		}
+	}
+
+	edgeToLatencies := s.obtainEdgeNodeLatencies()
+
 	// Based on score only
 	// Any other metrics?
 	bestFreeNode := ""
@@ -429,7 +471,35 @@ func (s *Scheduler) GetNodeIPForSchedule(nodeScores map[string]map[string]float6
 
 	for clusterName, nodes := range nodeScores {
 		for nodeIP, score := range nodes {
-			if score > bestScore && hasEnoughCapacity(s.Clientsets[clusterName], nodeIP, pod) {
+			if !hasEnoughCapacity(s.Clientsets[clusterName], nodeIP, pod) {
+				continue
+			}
+
+			if hasLimit {
+				meetsLimit := true
+
+				for edgeProxy, latencies := range edgeToLatencies {
+					latencyMs, ok := latencies[nodeIP]
+					if !ok {
+						log.Printf("Node %s missing latency data from edge %s", nodeIP, edgeProxy)
+						meetsLimit = false
+						break
+					}
+
+					latencyDuration := time.Duration(latencyMs * float64(time.Millisecond))
+					if latencyDuration > latencyLimit {
+						log.Printf("Node %s exceeds latency limit from edge %s: %v > %v", nodeIP, edgeProxy, latencyDuration, latencyLimit)
+						meetsLimit = false
+						break
+					}
+				}
+
+				if !meetsLimit {
+					continue
+				}
+			}
+
+			if score > bestScore {
 				bestScore = score
 				bestFreeNode = nodeIP
 				bestFreeNodeCluster = clusterName
@@ -442,6 +512,21 @@ func (s *Scheduler) GetNodeIPForSchedule(nodeScores map[string]map[string]float6
 	}
 
 	return bestFreeNode, bestFreeNodeCluster, nil
+}
+
+func (s *Scheduler) obtainEdgeNodeLatencies() map[string]util.NodeLatencies {
+	edgeToLatencies := make(map[string]util.NodeLatencies)
+
+	for _, edgeProxy := range s.EdgeProxies {
+		latencies, err := s.DB.GetAverageLatenciesForEdge(edgeProxy)
+		if err != nil {
+			log.Printf("Failed to get latencies from edge %s: %v", edgeProxy, err)
+			continue
+		}
+		edgeToLatencies[edgeProxy] = latencies
+	}
+
+	return edgeToLatencies
 }
 
 func isNodeReady(node *v1.Node) bool {
