@@ -463,6 +463,43 @@ func (s *Scheduler) GetNodeIPForSchedule(nodeScores map[string]map[string]float6
 
 	edgeToLatencies := s.obtainEdgeNodeLatencies()
 
+	podsPerNode := make(map[string]bool)
+
+	appLabel := pod.Labels["app"]
+	if appLabel != "" {
+		for clusterName, clientset := range s.Clientsets {
+			for _, namespace := range s.IncludedNamespaces {
+				pods, err := clientset.CoreV1().Pods(namespace).List(context.TODO(), metav1.ListOptions{
+					LabelSelector: fmt.Sprintf("app=%s", appLabel),
+				})
+				if err != nil {
+					log.Printf("Error listing pods for app=%s in cluster=%s: %v", appLabel, clusterName, err)
+					continue
+				}
+
+				for _, existingPod := range pods.Items {
+					if existingPod.Spec.NodeName == "" || existingPod.DeletionTimestamp != nil {
+						continue
+					}
+
+					node, err := clientset.CoreV1().Nodes().Get(context.TODO(), existingPod.Spec.NodeName, metav1.GetOptions{})
+					if err != nil {
+						log.Printf("Error getting node for pod %s: %v", existingPod.Name, err)
+						continue
+					}
+
+					nodeIP, err := util.GetNodeInternalIP(node)
+					if err != nil {
+						log.Printf("Error getting node IP for pod %s: %v", existingPod.Name, err)
+						continue
+					}
+
+					podsPerNode[nodeIP] = true
+				}
+			}
+		}
+	}
+
 	// Based on score only
 	// Any other metrics?
 	bestFreeNode := ""
@@ -471,6 +508,10 @@ func (s *Scheduler) GetNodeIPForSchedule(nodeScores map[string]map[string]float6
 
 	for clusterName, nodes := range nodeScores {
 		for nodeIP, score := range nodes {
+			if podsPerNode[nodeIP] {
+				continue
+			}
+
 			if !hasEnoughCapacity(s.Clientsets[clusterName], nodeIP, pod) {
 				continue
 			}
