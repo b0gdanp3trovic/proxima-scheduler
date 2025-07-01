@@ -186,7 +186,7 @@ func (s *Scheduler) schedulePod(pod *v1.Pod) {
 	podCopy.ResourceVersion = ""
 	podCopy.UID = ""
 	podCopy.Spec.NodeName = nodeName
-	podCopy.Name = fmt.Sprintf("%s-scheduled", pod.Name)
+	podCopy.Name = withNewHashedName(pod.Name)
 
 	log.Printf("Creating pod %s in cluster %s on node %s", podCopy.Name, targetCluster, nodeName)
 	_, err = s.Clientsets[targetCluster].CoreV1().Pods(pod.Namespace).Create(context.TODO(), podCopy, metav1.CreateOptions{})
