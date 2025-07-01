@@ -372,7 +372,7 @@ func preprocessRequest(ep *EdgeProxy) http.Handler {
 		if recorder.statusCode >= http.StatusInternalServerError {
 			log.Printf("Request to %s failed with status %d, invalidating cache for service %s", target.ForwardHost, recorder.statusCode, serviceName)
 			ep.invalidateCache(serviceName)
-			http.Error(w, "Failed to forward request to pod", http.StatusBadGateway)
+			return
 		}
 	})
 
