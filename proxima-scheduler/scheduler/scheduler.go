@@ -232,13 +232,13 @@ func (s *Scheduler) ReconcilePods() {
 			}
 
 			for _, pod := range pods.Items {
-				limitStr, hasLimit := pod.Annotations["proxima-scheduler/latency_limit"]
+				limitStr, hasLimit := pod.Annotations["proxima-scheduler/max-latency-ms"]
 				var latencyLimit time.Duration
 				if hasLimit {
 					var err error
 					latencyLimit, err = time.ParseDuration(limitStr)
 					if err != nil {
-						log.Printf("Invalid latency_limit annotation on pod %s: %v", pod.Name, err)
+						log.Printf("Invalid max-latency-ms annotation on pod %s: %v", pod.Name, err)
 						hasLimit = false
 					}
 				}
@@ -450,14 +450,14 @@ func (s *Scheduler) GetNodeScores() (map[string]map[string]float64, error) {
 }
 
 func (s *Scheduler) GetNodeIPForSchedule(nodeScores map[string]map[string]float64, pod *v1.Pod) (string, string, error) {
-	limitStr, hasLimit := pod.Annotations["proxima-scheduler/latency_limit"]
+	limitStr, hasLimit := pod.Annotations["proxima-scheduler/max-latency-ms"]
 	var latencyLimit time.Duration
 	if hasLimit {
 		var err error
 		latencyLimit, err = time.ParseDuration(limitStr)
 		if err != nil {
-			log.Printf("Invalid latency_limit annotation on pod %s: %v", pod.Name, err)
-			return "", "", fmt.Errorf("invalid latency_limit: %w", err)
+			log.Printf("Invalid max-latency-ms annotation on pod %s: %v", pod.Name, err)
+			return "", "", fmt.Errorf("invalid max-latency-ms: %w", err)
 		}
 	}
 
