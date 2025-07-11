@@ -208,9 +208,130 @@ func (s *Scheduler) schedulePod(pod *v1.Pod) {
 	}
 }
 
+func (s *Scheduler) reschedulePod(
+	pod *v1.Pod,
+	nodeScores map[string]map[string]float64,
+	currentCluster string,
+	clientset *kubernetes.Clientset,
+) {
+	bestIP, bestCluster, err := s.GetNodeIPForSchedule(nodeScores, pod)
+	if err != nil {
+		log.Printf("Error finding new node for pod %s: %v", pod.Name, err)
+		return
+	}
+
+	bestNode, err := util.GetNodeByInternalIP(s.Clientsets[bestCluster], bestIP)
+	if err != nil {
+		log.Printf("Failed to get node object for IP %s: %v", bestIP, err)
+		return
+	}
+
+	nodeName := bestNode.Name
+
+	newPod := pod.DeepCopy()
+	newPod.ResourceVersion = ""
+	newPod.UID = ""
+	newPod.Spec.NodeName = nodeName
+	newPod.Name = withNewHashedName(pod.Name)
+
+	_, err = s.Clientsets[bestCluster].CoreV1().Pods(newPod.Namespace).Create(context.TODO(), newPod, metav1.CreateOptions{})
+	if err != nil {
+		log.Printf("Failed to create rescheduled pod %s in cluster %s: %v", newPod.Name, bestCluster, err)
+		return
+	}
+
+	err = clientset.CoreV1().Pods(pod.Namespace).Delete(context.TODO(), pod.Name, metav1.DeleteOptions{})
+	if err != nil {
+		log.Printf("Failed to delete original pod %s: %v", pod.Name, err)
+	} else {
+		log.Printf("Rescheduled pod %s to node %s (%s)", pod.Name, nodeName, bestCluster)
+	}
+}
+
+func (s *Scheduler) handlePodReconciliation(
+	pod v1.Pod,
+	nodeScores map[string]map[string]float64,
+	edgeToLatencies map[string]util.NodeLatencies,
+	clusterName string,
+	clientset *kubernetes.Clientset,
+) {
+	limitStr, hasLimit := pod.Annotations["proxima-scheduler/max-latency-ms"]
+	var latencyLimit time.Duration
+	if hasLimit {
+		var err error
+		latencyLimit, err = time.ParseDuration(limitStr)
+		if err != nil {
+			log.Printf("Invalid max-latency-ms annotation on pod %s: %v", pod.Name, err)
+			hasLimit = false
+		}
+	}
+
+	if pod.Spec.NodeName == "" {
+		return
+	}
+
+	if pod.DeletionTimestamp != nil {
+		log.Printf("Skipping pod %s because it's being deleted", pod.Name)
+		return
+	}
+
+	node, err := clientset.CoreV1().Nodes().Get(context.TODO(), pod.Spec.NodeName, metav1.GetOptions{})
+	if err != nil {
+		log.Printf("Error obtaining node %s: %v", pod.Spec.NodeName, err)
+		return
+	}
+
+	currentNodeIP, err := util.GetNodeInternalIP(node)
+	if err != nil {
+		log.Printf("Error obtaining NodeIP for node %s: %v", pod.Spec.NodeName, err)
+		return
+	}
+
+	if hasLimit {
+		meetsLimit := true
+
+		for edgeProxy, latencies := range edgeToLatencies {
+			latencyMs, ok := latencies[currentNodeIP]
+			if !ok {
+				log.Printf("Pod %s: missing latency data from edge %s to node %s", pod.Name, edgeProxy, currentNodeIP)
+				meetsLimit = false
+				break
+			}
+			latencyDuration := time.Duration(latencyMs * float64(time.Millisecond))
+			if latencyDuration > latencyLimit {
+				log.Printf("Pod %s: current node exceeds latency limit from edge %s: %v > %v",
+					pod.Name, edgeProxy, latencyDuration, latencyLimit)
+				meetsLimit = false
+				break
+			}
+		}
+
+		if !meetsLimit {
+			log.Printf("Pod %s no longer meets latency constraint, rescheduling...", pod.Name)
+			s.reschedulePod(&pod, nodeScores, clusterName, clientset)
+			return
+		}
+	}
+
+	currentScore := nodeScores[clusterName][currentNodeIP]
+	bestIP, bestCluster, err := s.GetNodeIPForSchedule(nodeScores, &pod)
+	if err != nil {
+		log.Printf("Error getting best node for pod %s: %v", pod.Name, err)
+		return
+	}
+	bestScore := nodeScores[bestCluster][bestIP]
+
+	if bestScore > currentScore*1.2 {
+		log.Printf("Pod %s is on a suboptimal node. Best score: %.2f vs current %.2f. Rescheduling...", pod.Name, bestScore, currentScore)
+		s.reschedulePod(&pod, nodeScores, clusterName, clientset)
+	} else {
+		log.Printf("Pod %s is on an optimal node: %s", pod.Name, pod.Spec.NodeName)
+	}
+}
+
 /*
 Function that is performed periodically, update state and check if there is a possible better node for a pod.
-TODO - think about latency limit, decouple this function.
+TODO - pods with max_latency should be prioritize
 */
 func (s *Scheduler) ReconcilePods() {
 	nodeScores, err := s.GetNodeScores()
@@ -226,150 +347,20 @@ func (s *Scheduler) ReconcilePods() {
 			pods, err := clientset.CoreV1().Pods(namespace).List(context.TODO(), metav1.ListOptions{
 				LabelSelector: "app",
 			})
-
 			if err != nil {
 				log.Printf("Error listing pods in cluster %s and namespace %s: %v", clusterName, namespace, err)
+				continue
 			}
 
 			for _, pod := range pods.Items {
-				limitStr, hasLimit := pod.Annotations["proxima-scheduler/max-latency-ms"]
-				var latencyLimit time.Duration
-				if hasLimit {
-					var err error
-					latencyLimit, err = time.ParseDuration(limitStr)
-					if err != nil {
-						log.Printf("Invalid max-latency-ms annotation on pod %s: %v", pod.Name, err)
-						hasLimit = false
-					}
+				if _, hasLimit := pod.Annotations["proxima-scheduler/max-latency-ms"]; hasLimit {
+					s.handlePodReconciliation(pod, nodeScores, edgeToLatencies, clusterName, clientset)
 				}
+			}
 
-				if pod.Spec.NodeName == "" {
-					continue
-				}
-
-				if pod.DeletionTimestamp != nil {
-					log.Printf("Skipping pod %s because it's being deleted", pod.Name)
-					continue
-				}
-
-				app := pod.Labels["app"]
-				if app == "" {
-					log.Printf("App label not found on pod %v, using unknown.", pod.Name)
-				}
-
-				node, err := clientset.CoreV1().Nodes().Get(context.TODO(), pod.Spec.NodeName, metav1.GetOptions{})
-				if err != nil {
-					log.Printf("Error obtaining node %s", pod.Spec.NodeName)
-				}
-
-				currentNodeIP, err := util.GetNodeInternalIP(node)
-				if err != nil {
-					log.Printf("Error obtaining NodeIP for node %s", pod.Spec.NodeName)
-				}
-
-				if hasLimit {
-					meetsLimit := true
-
-					for edgeProxy, latencies := range edgeToLatencies {
-						latencyMs, ok := latencies[currentNodeIP]
-
-						if !ok {
-							log.Printf("Pod %s: missing latency data from edge %s to node %s", pod.Name, edgeProxy, currentNodeIP)
-							meetsLimit = false
-							break
-						}
-
-						latencyDuration := time.Duration(latencyMs * float64(time.Millisecond))
-						if latencyDuration > latencyLimit {
-							log.Printf("Pod %s: current node exceeds latency limit from edge %s: %v>%v",
-								pod.Name, edgeProxy, latencyDuration, latencyLimit)
-							meetsLimit = false
-							break
-						}
-					}
-
-					if !meetsLimit {
-						log.Printf("Pod %s no longer meets latency constraint, rescheduling...", pod.Name)
-
-						bestIP, bestCluster, err := s.GetNodeIPForSchedule(nodeScores, &pod)
-						if err != nil {
-							log.Printf("Error finding new node for pod %s: %v", pod.Name, err)
-							continue
-						}
-
-						bestNode, err := util.GetNodeByInternalIP(s.Clientsets[bestCluster], bestIP)
-						if err != nil {
-							log.Printf("Failed to get node object for IP %s: %v", bestIP, err)
-							continue
-						}
-						nodeName := bestNode.Name
-
-						newPod := pod.DeepCopy()
-						newPod.ResourceVersion = ""
-						newPod.UID = ""
-						newPod.Spec.NodeName = nodeName
-						newPod.Name = withNewHashedName(pod.Name)
-
-						_, err = s.Clientsets[bestCluster].CoreV1().Pods(newPod.Namespace).Create(context.TODO(), newPod, metav1.CreateOptions{})
-						if err != nil {
-							log.Printf("Failed to create rescheduled pod %s in cluster %s: %v", newPod.Name, bestCluster, err)
-							continue
-						}
-
-						err = clientset.CoreV1().Pods(pod.Namespace).Delete(context.TODO(), pod.Name, metav1.DeleteOptions{})
-						if err != nil {
-							log.Printf("Failed to delete original pod %s: %v", pod.Name, err)
-						} else {
-							log.Printf("Rescheduled pod %s to node %s (%s) due to latency SLO violation.", pod.Name, nodeName, bestCluster)
-						}
-
-						// Don't continue with the rescheduling
-						continue
-					}
-				}
-
-				//TODO: throttle rescheduling
-				currentScore := nodeScores[clusterName][currentNodeIP]
-				bestIP, bestCluster, err := s.GetNodeIPForSchedule(nodeScores, &pod)
-
-				if err != nil {
-					log.Printf("Error getting best node for pod %s: %v", pod.Name, err)
-					continue
-				}
-
-				bestScore := nodeScores[bestCluster][bestIP]
-
-				if bestScore > currentScore*1.2 {
-					log.Printf("Pod %s is on a suboptimal node. Best score: %.2f vs current %.2f. Rescheduling...", pod.Name, bestScore, currentScore)
-
-					node, err := util.GetNodeByInternalIP(s.Clientsets[bestCluster], bestIP)
-					if err != nil {
-						log.Printf("Failed to get best node for IP %s: %v", bestIP, err)
-						continue
-					}
-					nodeName := node.Name
-
-					// Another copy - rethink it ASAP
-					newPod := pod.DeepCopy()
-					newPod.ResourceVersion = ""
-					newPod.UID = ""
-					newPod.Spec.NodeName = nodeName
-					newPod.Name = withNewHashedName(pod.Name)
-
-					_, err = s.Clientsets[bestCluster].CoreV1().Pods(newPod.Namespace).Create(context.TODO(), newPod, metav1.CreateOptions{})
-					if err != nil {
-						log.Printf("Failed to create rescheduled pod %s in cluster %s: %v", newPod.Name, bestCluster, err)
-						continue
-					}
-
-					err = clientset.CoreV1().Pods(pod.Namespace).Delete(context.TODO(), pod.Name, metav1.DeleteOptions{})
-					if err != nil {
-						log.Printf("Failed to delete original pod %s from cluster %s: %v", pod.Name, clusterName, err)
-					} else {
-						log.Printf("Successfully rescheduled pod %s to %s (%s)", pod.Name, nodeName, bestCluster)
-					}
-				} else {
-					log.Printf("Pod %s is on an optimal node: - %s", pod.Name, pod.Spec.NodeName)
+			for _, pod := range pods.Items {
+				if _, hasLimit := pod.Annotations["proxima-scheduler/max-latency-ms"]; !hasLimit {
+					s.handlePodReconciliation(pod, nodeScores, edgeToLatencies, clusterName, clientset)
 				}
 			}
 		}
