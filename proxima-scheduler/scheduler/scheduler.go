@@ -304,6 +304,36 @@ func (s *Scheduler) EnforceDesired() {
 					continue
 				}
 
+				switch pod.Status.Phase {
+				case v1.PodRunning:
+					runningCount++
+					foundNames[pod.Name] = true
+
+				case v1.PodPending:
+					pendingDuration := time.Since(pod.CreationTimestamp.Time)
+					if pendingDuration > 60*time.Second {
+						log.Printf("Pending pod %s for %v deleting and replacing...", pod.Name, pendingDuration)
+						err := clientset.CoreV1().Pods(pod.Namespace).Delete(context.TODO(), pod.Name, metav1.DeleteOptions{})
+						if err != nil {
+							log.Printf("Error deleting stuck pending pod %s: %v", pod.Name, err)
+						}
+					} else {
+						runningCount++
+						foundNames[pod.Name] = true
+						log.Printf("Pending pod %s is new (%v) — counted as temporarily available", pod.Name, pendingDuration)
+					}
+
+				case v1.PodFailed:
+					log.Printf("Pod %s is failed — deleting and replacing", pod.Name)
+					err := clientset.CoreV1().Pods(pod.Namespace).Delete(context.TODO(), pod.Name, metav1.DeleteOptions{})
+					if err != nil {
+						log.Printf("Error deleting failed pod %s: %v", pod.Name, err)
+					}
+
+				default:
+					log.Printf("Pod %s in phase %s — not counted", pod.Name, pod.Status.Phase)
+				}
+
 				if pod.Status.Phase != v1.PodRunning {
 					continue
 				}
