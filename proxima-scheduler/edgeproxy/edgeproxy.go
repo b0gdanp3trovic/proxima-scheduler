@@ -45,7 +45,6 @@ type K8sPodInstance struct {
 	Port    int32
 	Cluster string
 }
-
 type ForwardTarget struct {
 	Pod         K8sPodInstance
 	ForwardHost string

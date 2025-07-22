@@ -25,13 +25,30 @@ type Scheduler struct {
 	IncludedNamespaces []string
 	StopCh             chan struct{}
 	DB                 util.Database
-	ScheduledPods      map[string]map[string]string
 	EdgeProxies        []string
+	DesiredApps        map[string]*DesiredApp
 }
 
 type nodeScorePair struct {
 	Name  string
 	Score float64
+}
+
+type DesiredApp struct {
+	App         string
+	Namespace   string
+	Replicas    int
+	Annotations map[string]string
+	Labels      map[string]string
+	Template    *v1.Pod
+	PodsByName  map[string]*DesiredPod
+}
+
+type DesiredPod struct {
+	Name          string
+	Cluster       string
+	NodeName      string
+	LastHeartbeat time.Time
 }
 
 func NewScheduler(
@@ -65,6 +82,7 @@ func NewScheduler(
 		StopCh:             make(chan struct{}),
 		DB:                 db,
 		EdgeProxies:        edgeProxies,
+		DesiredApps:        make(map[string]*DesiredApp),
 	}, nil
 }
 
@@ -106,6 +124,15 @@ func (s *Scheduler) Run() {
 										log.Printf("Invalid replicas annotation on pod %s: %v", pod.Name, err)
 									}
 
+									s.DesiredApps[pod.Labels["app"]] = &DesiredApp{
+										App:         pod.Labels["app"],
+										Namespace:   pod.Namespace,
+										Replicas:    replicas,
+										Annotations: pod.Annotations,
+										Labels:      pod.Labels,
+										Template:    pod.DeepCopy(),
+									}
+
 									for i := 0; i < replicas; i++ {
 										copy := pod.DeepCopy()
 										copy.ResourceVersion = ""
@@ -145,6 +172,7 @@ func (s *Scheduler) Run() {
 			select {
 			case <-ticker.C:
 				s.ReconcilePods()
+				s.EnforceDesired()
 			case <-s.StopCh:
 				log.Println("Stopping reconciliation loop")
 				return
@@ -202,9 +230,13 @@ func (s *Scheduler) schedulePod(pod *v1.Pod) {
 		log.Printf("Deleted original pod %s from local cluster", pod.Name)
 	}
 
-	app := pod.Labels["app"]
-	if app == "" {
-		app = "unknown"
+	app := podCopy.Labels["app"]
+
+	s.DesiredApps[app].PodsByName[podCopy.Name] = &DesiredPod{
+		Name:          podCopy.Name,
+		Cluster:       targetCluster,
+		NodeName:      podCopy.Spec.NodeName,
+		LastHeartbeat: time.Now(),
 	}
 }
 
@@ -246,6 +278,78 @@ func (s *Scheduler) reschedulePod(
 	} else {
 		log.Printf("Rescheduled pod %s to node %s (%s)", pod.Name, nodeName, bestCluster)
 	}
+}
+
+func (s *Scheduler) EnforceDesired() {
+	for appName, desired := range s.DesiredApps {
+		runningCount := 0
+		foundNames := map[string]bool{}
+
+		for clusterName, clientset := range s.Clientsets {
+			pods, err := clientset.CoreV1().Pods(desired.Namespace).List(context.TODO(), metav1.ListOptions{
+				LabelSelector: fmt.Sprintf("app=%s", appName),
+			})
+
+			if err != nil {
+				log.Printf("Error listing pods for app %s in cluster %s: %v", appName, clusterName, err)
+				continue
+			}
+
+			for _, pod := range pods.Items {
+				if pod.DeletionTimestamp != nil {
+					continue
+				}
+
+				if pod.Spec.SchedulerName != s.SchedulerName {
+					continue
+				}
+
+				if pod.Status.Phase != v1.PodRunning {
+					continue
+				}
+
+				runningCount++
+				foundNames[pod.Name] = true
+			}
+		}
+
+		for name := range desired.PodsByName {
+			if !foundNames[name] {
+				log.Printf("Tracked pod %s for app %s is missing from cluster state", name, appName)
+				delete(desired.PodsByName, name)
+			}
+		}
+
+		missing := desired.Replicas - runningCount
+		if missing > 0 {
+			log.Printf("App %s has %d/%d replicas. Spawning %d more...", appName, runningCount, desired.Replicas, missing)
+			for range missing {
+				s.spawnReplica(desired)
+			}
+		}
+	}
+}
+
+func (s *Scheduler) spawnReplica(desired *DesiredApp) {
+	copy := desired.Template.DeepCopy()
+	copy.ResourceVersion = ""
+	copy.UID = ""
+	copy.Spec.NodeName = ""
+	copy.Name = withNewHashedName(fmt.Sprintf("%s-recover", desired.Template.Name))
+
+	if copy.Annotations == nil {
+		copy.Annotations = map[string]string{}
+	}
+	copy.Annotations["proxima-scheduler/generated"] = "true"
+	copy.Annotations["proxima-scheduler/generated-from"] = desired.Template.Name
+
+	_, err := s.Clientsets["local"].CoreV1().Pods(desired.Namespace).Create(context.TODO(), copy, metav1.CreateOptions{})
+	if err != nil {
+		log.Printf("Failed to spawn replica pod %s: %v", copy.Name, err)
+		return
+	}
+
+	log.Printf("Spawned missing replica %s for app %s", copy.Name, desired.App)
 }
 
 func (s *Scheduler) handlePodReconciliation(
