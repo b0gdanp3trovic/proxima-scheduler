@@ -391,11 +391,12 @@ func (s *Scheduler) handlePodReconciliation(
 	limitStr, hasLimit := pod.Annotations["proxima-scheduler/max-latency-ms"]
 	var latencyLimit time.Duration
 	if hasLimit {
-		var err error
-		latencyLimit, err = time.ParseDuration(limitStr)
+		ms, err := strconv.ParseInt(limitStr, 10, 64)
 		if err != nil {
 			log.Printf("Invalid max-latency-ms annotation on pod %s: %v", pod.Name, err)
 			hasLimit = false
+		} else {
+			latencyLimit = time.Duration(ms) * time.Millisecond
 		}
 	}
 
