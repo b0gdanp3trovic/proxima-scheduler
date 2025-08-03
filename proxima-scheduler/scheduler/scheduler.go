@@ -322,7 +322,6 @@ func (s *Scheduler) EnforceDesired() {
 						foundNames[pod.Name] = true
 						log.Printf("Pending pod %s is new (%v) — counted as temporarily available", pod.Name, pendingDuration)
 					}
-
 				case v1.PodFailed:
 					log.Printf("Pod %s is failed — deleting and replacing", pod.Name)
 					err := clientset.CoreV1().Pods(pod.Namespace).Delete(context.TODO(), pod.Name, metav1.DeleteOptions{})
@@ -576,14 +575,15 @@ func (s *Scheduler) GetNodeScores() (map[string]map[string]float64, error) {
 
 func (s *Scheduler) GetNodeIPForSchedule(nodeScores map[string]map[string]float64, pod *v1.Pod) (string, string, error) {
 	limitStr, hasLimit := pod.Annotations["proxima-scheduler/max-latency-ms"]
+
 	var latencyLimit time.Duration
 	if hasLimit {
-		var err error
-		latencyLimit, err = time.ParseDuration(limitStr)
+		ms, err := strconv.ParseInt(limitStr, 10, 64)
 		if err != nil {
 			log.Printf("Invalid max-latency-ms annotation on pod %s: %v", pod.Name, err)
 			return "", "", fmt.Errorf("invalid max-latency-ms: %w", err)
 		}
+		latencyLimit = time.Duration(ms) * time.Millisecond
 	}
 
 	edgeToLatencies := s.obtainEdgeNodeLatencies()
