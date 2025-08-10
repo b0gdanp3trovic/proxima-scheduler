@@ -6,7 +6,7 @@ metadata:
   labels:
     app: test-flask-service
   annotations:
-    proxima-scheduler/replicas: "3"
+    proxima-scheduler/replicas: "1"
     proxima-scheduler/max-latency-ms: "100"
 spec:
   schedulerName: proxima-scheduler

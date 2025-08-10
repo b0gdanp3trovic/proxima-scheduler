@@ -29,11 +29,6 @@ type Scheduler struct {
 	DesiredApps        map[string]*DesiredApp
 }
 
-type nodeScorePair struct {
-	Name  string
-	Score float64
-}
-
 type DesiredApp struct {
 	App         string
 	Namespace   string
@@ -336,9 +331,6 @@ func (s *Scheduler) EnforceDesired() {
 				if pod.Status.Phase != v1.PodRunning {
 					continue
 				}
-
-				runningCount++
-				foundNames[pod.Name] = true
 			}
 		}
 
@@ -350,6 +342,7 @@ func (s *Scheduler) EnforceDesired() {
 		}
 
 		missing := desired.Replicas - runningCount
+		log.Printf("Missing is %v", missing)
 		if missing > 0 {
 			log.Printf("App %s has %d/%d replicas. Spawning %d more...", appName, runningCount, desired.Replicas, missing)
 			for range missing {
