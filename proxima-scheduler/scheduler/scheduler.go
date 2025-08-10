@@ -341,6 +341,8 @@ func (s *Scheduler) EnforceDesired() {
 			}
 		}
 
+		log.Printf("desired.Replicas: %v", desired.Replicas)
+		log.Printf("runningCount: %v", runningCount)
 		missing := desired.Replicas - runningCount
 		log.Printf("Missing is %v", missing)
 		if missing > 0 {
