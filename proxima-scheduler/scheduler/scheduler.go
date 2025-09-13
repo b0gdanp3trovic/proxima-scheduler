@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"math"
+	"math/rand/v2"
 	"regexp"
 	"strconv"
 	"time"
@@ -40,10 +41,14 @@ type DesiredApp struct {
 }
 
 type DesiredPod struct {
-	Name          string
-	Cluster       string
-	NodeName      string
-	LastHeartbeat time.Time
+	Name     string
+	Cluster  string
+	NodeName string
+}
+
+type NodeCandidate struct {
+	ip, cluster string
+	score       float64
 }
 
 func NewScheduler(
@@ -228,10 +233,9 @@ func (s *Scheduler) schedulePod(pod *v1.Pod) {
 	app := podCopy.Labels["app"]
 
 	s.DesiredApps[app].PodsByName[podCopy.Name] = &DesiredPod{
-		Name:          podCopy.Name,
-		Cluster:       targetCluster,
-		NodeName:      podCopy.Spec.NodeName,
-		LastHeartbeat: time.Now(),
+		Name:     podCopy.Name,
+		Cluster:  targetCluster,
+		NodeName: podCopy.Spec.NodeName,
 	}
 }
 
@@ -338,16 +342,6 @@ func (s *Scheduler) EnforceDesired() {
 			if !foundNames[name] {
 				log.Printf("Tracked pod %s for app %s is missing from cluster state", name, appName)
 				delete(desired.PodsByName, name)
-			}
-		}
-
-		log.Printf("desired.Replicas: %v", desired.Replicas)
-		log.Printf("runningCount: %v", runningCount)
-		missing := desired.Replicas - runningCount
-		log.Printf("Missing is %v", missing)
-		if missing > 0 {
-			log.Printf("App %s has %d/%d replicas. Spawning %d more...", appName, runningCount, desired.Replicas, missing)
-			for range missing {
 				s.spawnReplica(desired)
 			}
 		}
@@ -624,14 +618,14 @@ func (s *Scheduler) GetNodeIPForSchedule(nodeScores map[string]map[string]float6
 	// Based on score only
 	// Any other metrics?
 	bestFreeNode := ""
-	bestFreeNodeCluster := ""
 	bestScore := -math.MaxFloat64
+	epsilon := 0.1
 
 	for clusterName, nodes := range nodeScores {
 		for nodeIP, score := range nodes {
-			if podsPerNode[nodeIP] {
-				continue
-			}
+			//if podsPerNode[nodeIP] {
+			//	continue
+			//}
 
 			if !hasEnoughCapacity(s.Clientsets[clusterName], nodeIP, pod) {
 				continue
@@ -664,7 +658,6 @@ func (s *Scheduler) GetNodeIPForSchedule(nodeScores map[string]map[string]float6
 			if score > bestScore {
 				bestScore = score
 				bestFreeNode = nodeIP
-				bestFreeNodeCluster = clusterName
 			}
 		}
 	}
@@ -673,7 +666,74 @@ func (s *Scheduler) GetNodeIPForSchedule(nodeScores map[string]map[string]float6
 		return "", "", fmt.Errorf("no suitable node found for scheduling pod %s", pod.Name)
 	}
 
-	return bestFreeNode, bestFreeNodeCluster, nil
+	cands := make([]NodeCandidate, 0, 8)
+	threshold := bestScore * (1.0 - epsilon)
+
+	for clusterName, nodes := range nodeScores {
+		for nodeIP, score := range nodes {
+			if score < threshold {
+				continue
+			}
+
+			//if podsPerNode[nodeIP]
+			if !hasEnoughCapacity(s.Clientsets[clusterName], nodeIP, pod) {
+				continue
+			}
+
+			if hasLimit {
+				meets := true
+				for _, lat := range edgeToLatencies {
+					v, ok := lat[nodeIP]
+					if !ok {
+						meets = false
+						break
+					}
+					if time.Duration(v*float64(time.Millisecond)) > latencyLimit {
+						meets = false
+						break
+					}
+				}
+				if !meets {
+					continue
+				}
+			}
+
+			cands = append(cands, NodeCandidate{ip: nodeIP, cluster: clusterName, score: score})
+		}
+	}
+
+	if len(cands) == 0 {
+		return "", "", fmt.Errorf("no near-optimal node found for scheduling pod %s", pod.Name)
+	}
+
+	pickedIP, pickedCluster := pickWeightedByScore(cands)
+	return pickedIP, pickedCluster, nil
+}
+
+func pickWeightedByScore(cands []NodeCandidate) (string, string) {
+	min := math.MaxFloat64
+	for _, c := range cands {
+		if c.score < min {
+			min = c.score
+		}
+	}
+	total := 0.0
+	weights := make([]float64, len(cands))
+	for i, c := range cands {
+		w := (c.score - min) + 1e-6
+		weights[i] = w
+		total += w
+	}
+	r := rand.Float64() * total
+	acc := 0.0
+	for i, w := range weights {
+		acc += w
+		if r <= acc {
+			return cands[i].ip, cands[i].cluster
+		}
+	}
+	last := cands[len(cands)-1]
+	return last.ip, last.cluster
 }
 
 func (s *Scheduler) obtainEdgeNodeLatencies() map[string]util.NodeLatencies {
