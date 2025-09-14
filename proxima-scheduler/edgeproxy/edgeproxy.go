@@ -141,7 +141,7 @@ func NewEdgeProxy(
 				req.URL.Host = targetUrl
 			},
 			ModifyResponse: func(resp *http.Response) error {
-				if resp.Request.Header.Get("X-Proxima-Forwarded") == "true" {
+				if resp.Request.Header.Get("X-Proxima-Forwarded") == "true" && resp.Request.Context().Value("is_first_proxy") == true {
 					log.Printf("[DEBUG] Skipping modifying response, as X-Proxima-Forwarded is present.")
 					// Skip recording metrics for forwarded requests.
 					// These metrics should be recorded by source edge proxies.
@@ -356,18 +356,17 @@ func preprocessRequest(ep *EdgeProxy) http.Handler {
 			return
 		}
 
-		if target.UseProxy {
-			r.URL.Path = "/" + serviceName + r.URL.Path
-			r.Header.Set("X-Proxima-Forwarded", "true")
-		} else {
-			r.Header.Del("X-Proxima-Forwarded")
-		}
-
 		ctx := r.Context()
 		ctx = context.WithValue(ctx, "target_url", target.ForwardHost)
 		ctx = context.WithValue(ctx, "node_ip", target.Pod.NodeIP)
 		ctx = context.WithValue(ctx, "start_time", time.Now())
 		ctx = context.WithValue(ctx, "service_name", serviceName)
+
+		if target.UseProxy {
+			r.URL.Path = "/" + serviceName + r.URL.Path
+			r.Header.Set("X-Proxima-Forwarded", "true")
+			ctx = context.WithValue(ctx, "is_first_proxy", true)
+		}
 
 		recorder := &ResponseRecorder{ResponseWriter: w, statusCode: http.StatusOK}
 		log.Printf("Forwarding request to %s (via proxy: %v)", target.ForwardHost, target.UseProxy)
