@@ -142,6 +142,7 @@ func NewEdgeProxy(
 			},
 			ModifyResponse: func(resp *http.Response) error {
 				if resp.Request.Header.Get("X-Proxima-Forwarded") == "true" {
+					log.Printf("[DEBUG] Skipping modifying response, as X-Proxima-Forwarded is present.")
 					// Skip recording metrics for forwarded requests.
 					// These metrics should be recorded by source edge proxies.
 					return nil
