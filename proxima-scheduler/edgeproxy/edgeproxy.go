@@ -147,6 +147,8 @@ func NewEdgeProxy(
 					return nil
 				}
 
+				log.Printf("[DEBUG] ModifyResponse invoked for %s", resp.Request.URL.String())
+
 				// Measure latency and log it
 				latency := time.Since(resp.Request.Context().Value("start_time").(time.Time))
 				podUrl := resp.Request.Context().Value("target_url").(string)
