@@ -29,7 +29,7 @@ func main() {
 	latencyWorker.Start()
 
 	// TODO - change
-	cacheDuration := 30 * time.Second
+	cacheDuration := 60 * time.Second
 
 	edgeProxy, err := edgeproxy.NewEdgeProxy(
 		cfg.ConsulURL,
