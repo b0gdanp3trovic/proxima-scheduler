@@ -120,53 +120,8 @@ func NewEdgeProxy(
 		}
 	}
 
-	return &EdgeProxy{
-		clientsets: clientsets,
-		proxy: &httputil.ReverseProxy{
-			Director: func(req *http.Request) {
-				targetUrl := req.Context().Value("target_url").(string)
-
-				// Adjust the path
-				parts := strings.Split(req.URL.Path, "/")
-				if len(parts) >= 2 {
-					// Path is like '/service/endpoint/...', forward it as '/endpoint/...'
-					req.URL.Path = "/" + strings.Join(parts[2:], "/")
-				} else {
-					// Path is just '/service', forward it as '/'
-					req.URL.Path = "/"
-				}
-
-				// Forward the request to the pod
-				req.URL.Scheme = "http"
-				req.URL.Host = targetUrl
-			},
-			ModifyResponse: func(resp *http.Response) error {
-				if resp.Request.Header.Get("X-Proxima-Forwarded") == "true" && resp.Request.Context().Value("is_first_proxy") != true {
-					log.Printf("[DEBUG] Skipping modifying response, as X-Proxima-Forwarded is present.")
-					// Skip recording metrics for forwarded requests.
-					// These metrics should be recorded by source edge proxies.
-					return nil
-				}
-
-				log.Printf("[DEBUG] ModifyResponse invoked for %s", resp.Request.URL.String())
-
-				// Measure latency and log it
-				latency := time.Since(resp.Request.Context().Value("start_time").(time.Time))
-				podUrl := resp.Request.Context().Value("target_url").(string)
-				nodeIP := resp.Request.Context().Value("node_ip").(string)
-				serviceName := resp.Request.Context().Value("service_name").(string)
-
-				worker.SendLatencyData(MetricsData{
-					ServiceName: serviceName,
-					PodURL:      podUrl,
-					NodeIP:      nodeIP,
-					Latency:     latency,
-					Timestamp:   time.Now(),
-				})
-
-				return nil
-			},
-		},
+	ep := &EdgeProxy{
+		clientsets:     clientsets,
 		consulAddress:  consulAddress,
 		database:       db,
 		cacheDuration:  cacheDuration,
@@ -177,7 +132,67 @@ func NewEdgeProxy(
 		namespace:      "default",
 		kindNetworkIP:  kindNetworkIP,
 		flightGroup:    singleflight.Group{},
-	}, nil
+	}
+
+	ep.proxy = &httputil.ReverseProxy{
+		Director: func(req *http.Request) {
+			targetUrl := req.Context().Value("target_url").(string)
+
+			// Adjust the path
+			parts := strings.Split(req.URL.Path, "/")
+			if len(parts) >= 2 {
+				// Path is like '/service/endpoint/...', forward it as '/endpoint/...'
+				req.URL.Path = "/" + strings.Join(parts[2:], "/")
+			} else {
+				// Path is just '/service', forward it as '/'
+				req.URL.Path = "/"
+			}
+
+			// Forward the request to the pod
+			req.URL.Scheme = "http"
+			req.URL.Host = targetUrl
+		},
+		ModifyResponse: func(resp *http.Response) error {
+			if resp.Request.Header.Get("X-Proxima-Forwarded") == "true" && resp.Request.Context().Value("is_first_proxy") != true {
+				log.Printf("[DEBUG] Skipping modifying response, as X-Proxima-Forwarded is present.")
+				// Skip recording metrics for forwarded requests.
+				// These metrics should be recorded by source edge proxies.
+				return nil
+			}
+
+			log.Printf("[DEBUG] ModifyResponse invoked for %s", resp.Request.URL.String())
+
+			// Measure latency and log it
+			latency := time.Since(resp.Request.Context().Value("start_time").(time.Time))
+			podUrl := resp.Request.Context().Value("target_url").(string)
+			nodeIP := resp.Request.Context().Value("node_ip").(string)
+			serviceName := resp.Request.Context().Value("service_name").(string)
+
+			worker.SendLatencyData(MetricsData{
+				ServiceName: serviceName,
+				PodURL:      podUrl,
+				NodeIP:      nodeIP,
+				Latency:     latency,
+				Timestamp:   time.Now(),
+			})
+
+			return nil
+		},
+		ErrorHandler: func(w http.ResponseWriter, r *http.Request, err error) {
+			serviceName, _ := r.Context().Value("service_name").(string)
+			targetUrl, _ := r.Context().Value("target_url").(string)
+
+			log.Printf("Error forwarding to %s for service %s: %v", targetUrl, serviceName, err)
+
+			if serviceName != "" {
+				ep.invalidateCache(serviceName)
+			}
+
+			http.Error(w, "Bad Gateway", http.StatusBadGateway)
+		},
+	}
+
+	return ep, nil
 }
 
 func getPodsForService(serviceName, namespace string, cluster string, clientset *kubernetes.Clientset) ([]K8sPodInstance, error) {
@@ -371,12 +386,6 @@ func preprocessRequest(ep *EdgeProxy) http.Handler {
 		recorder := &ResponseRecorder{ResponseWriter: w, statusCode: http.StatusOK}
 		log.Printf("Forwarding request to %s (via proxy: %v)", target.ForwardHost, target.UseProxy)
 		ep.proxy.ServeHTTP(recorder, r.WithContext(ctx))
-
-		if recorder.statusCode >= http.StatusInternalServerError {
-			log.Printf("Request to %s failed with status %d, invalidating cache for service %s", target.ForwardHost, recorder.statusCode, serviceName)
-			ep.invalidateCache(serviceName)
-			return
-		}
 	})
 
 }
