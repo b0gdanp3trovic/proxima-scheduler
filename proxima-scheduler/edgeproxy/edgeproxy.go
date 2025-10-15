@@ -177,6 +177,8 @@ func NewEdgeProxy(
 				Timestamp:   time.Now(),
 			})
 
+			log.Printf("[DEBUG] Modified response for %s", resp.Request.URL.String())
+
 			return nil
 		},
 		ErrorHandler: func(w http.ResponseWriter, r *http.Request, err error) {
