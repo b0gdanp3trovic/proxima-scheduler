@@ -40,10 +40,10 @@ spec:
               fieldPath: status.hostIP
         # used on Kind cluster locally,
         # the ip of the Node, needed for edgeproxy + pinger
-        - name: KIND_NETWORK_IP
-          value: "proxima1-worker"
         #- name: KIND_NETWORK_IP
-        #  value: "proxima2-worker"
+        #  value: "proxima1-worker"
+        - name: KIND_NETWORK_IP
+          value: "proxima2-worker"
         - name: NODE_IP
         - name: DATABASE_ENABLED
           value: "true"
@@ -52,7 +52,6 @@ spec:
         - name: INCLUDED_NAMESPACES
           value: "default"
         - name: INFLUXDB_ADDRESS
-          # actual address of the container inside docker network
           value: "http://172.19.0.7:8086"
         - name: INFLUXDB_TOKEN
           valueFrom:

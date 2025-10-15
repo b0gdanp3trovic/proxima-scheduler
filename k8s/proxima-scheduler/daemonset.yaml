@@ -46,7 +46,6 @@ spec:
         - name: INCLUDED_NAMESPACES
           value: "default"
         - name: INFLUXDB_ADDRESS
-          # actual address of the container inside docker network
           value: "http://172.19.0.7:8086"
         - name: INFLUXDB_TOKEN
           valueFrom:
@@ -64,4 +63,4 @@ spec:
       volumes:
       - name: kubeconfigs-volume
         secret:
-          secretName: kubeconfigs
+          secretName: kubeconfigs1

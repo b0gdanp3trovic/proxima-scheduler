@@ -39,7 +39,6 @@ spec:
         - name: DATABASE_ENABLED
           value: "true"
         - name: INFLUXDB_ADDRESS
-          # actual address of the container inside docker network
           value: "http://172.19.0.7:8086"
         - name: INFLUXDB_TOKEN
           valueFrom:
@@ -48,10 +47,10 @@ spec:
               key: INFLUXDB_TOKEN
         # used on Kind cluster locally,
         # the ip of the Node, needed for edgeproxy + pinger
-        - name: KIND_NETWORK_IP
-          value: "proxima1-worker"
         #- name: KIND_NETWORK_IP
-        #  value: "proxima2-worker"
+        #  value: "proxima1-worker"
+        - name: KIND_NETWORK_IP
+          value: "proxima2-worker"
         - name: NODE_IP
           valueFrom:
             fieldRef:
@@ -65,4 +64,4 @@ spec:
       volumes:
       - name: kubeconfigs-volume
         secret:
-          secretName: kubeconfigs
+          secretName: kubeconfigs3

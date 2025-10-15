@@ -4,7 +4,7 @@ metadata:
   name: test-flask-service-deployment
   namespace: default
 spec:
-  replicas: 2
+  replicas: 3
   selector:
     matchLabels:
       app: test-flask-service
@@ -12,10 +12,7 @@ spec:
     metadata:
       labels:
         app: test-flask-service
-      annotations:
-        consul-register: "true"
     spec:
-      schedulerName: proxima-scheduler
       containers:
       - name: test-flask-service-container
         image: bogdanb0gdan/test-flask-service:latest

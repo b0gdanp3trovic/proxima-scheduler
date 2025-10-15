@@ -2,6 +2,7 @@ package edgeproxy
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"math/rand"
@@ -180,15 +181,33 @@ func NewEdgeProxy(
 		},
 		ErrorHandler: func(w http.ResponseWriter, r *http.Request, err error) {
 			serviceName, _ := r.Context().Value("service_name").(string)
-			targetUrl, _ := r.Context().Value("target_url").(string)
+			targetURL, _ := r.Context().Value("target_url").(string)
 
-			log.Printf("Error forwarding to %s for service %s: %v", targetUrl, serviceName, err)
+			status := http.StatusBadGateway
+			msg := "Bad Gateway"
 
-			if serviceName != "" {
+			switch {
+			case errors.Is(err, context.Canceled):
+				log.Printf("[WARN] Client canceled request to %s (%s)", targetURL, serviceName)
+				status = 499
+				msg = "Client canceled request"
+
+			case errors.Is(err, context.DeadlineExceeded):
+				log.Printf("[WARN] Upstream timeout while contacting %s (%s)", targetURL, serviceName)
+				status = http.StatusGatewayTimeout
+				msg = "Upstream timeout"
+
+			default:
+				log.Printf("[ERROR] Proxy error to %s (%s): %v", targetURL, serviceName, err)
+			}
+
+			if serviceName != "" &&
+				!errors.Is(err, context.Canceled) &&
+				!errors.Is(err, context.DeadlineExceeded) {
 				ep.invalidateCache(serviceName)
 			}
 
-			http.Error(w, "Bad Gateway", http.StatusBadGateway)
+			http.Error(w, msg, status)
 		},
 	}
 

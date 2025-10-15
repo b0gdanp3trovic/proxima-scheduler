@@ -10,7 +10,7 @@ def measure_latency(url: str, delay: float, iterations: int, output_file: str):
         for i in range(iterations):
             start = time.time()
             try:
-                response = requests.get(url)
+                response = requests.get(url, timeout=5)
                 latency = (time.time() - start) * 1000
                 line = f"Request {i+1}: {response.status_code}, latency = {latency:.2f} ms\n"
                 print(line.strip())
@@ -26,7 +26,7 @@ def measure_latency(url: str, delay: float, iterations: int, output_file: str):
 if __name__ == "__main__":
     target_url = "http://localhost:8080/test-flask-service"
     delay_seconds = 1
-    num_requests = 5000
+    num_requests = 50000
     output_file = "latencies.txt"
 
     measure_latency(target_url, delay_seconds, num_requests, output_file)
