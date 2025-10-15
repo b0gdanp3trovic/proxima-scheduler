@@ -131,6 +131,7 @@ func (s *Scheduler) Run() {
 										Annotations: pod.Annotations,
 										Labels:      pod.Labels,
 										Template:    pod.DeepCopy(),
+										PodsByName:  make(map[string]*DesiredPod),
 									}
 
 									for i := 0; i < replicas; i++ {
