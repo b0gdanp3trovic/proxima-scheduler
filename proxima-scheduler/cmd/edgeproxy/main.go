@@ -22,6 +22,11 @@ func main() {
 
 	kubeconfigs, err := util.LoadKubeconfigs(cfg.KubeConfigsPath)
 
+	if err != nil {
+		log.Fatalf("Failed to obtain clientset: %v", err)
+		os.Exit(1)
+	}
+
 	influxClient := influxdb2.NewClient(cfg.InfluxDBAddress, cfg.InfluxDBToken)
 	influxDb := util.NewInfluxDB(influxClient, "proxima", "proxima")
 

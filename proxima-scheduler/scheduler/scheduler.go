@@ -354,7 +354,7 @@ func (s *Scheduler) spawnReplica(desired *DesiredApp) {
 	copy.ResourceVersion = ""
 	copy.UID = ""
 	copy.Spec.NodeName = ""
-	copy.Name = withNewHashedName(fmt.Sprintf("%s-recover", desired.Template.Name))
+	copy.Name = withNewHashedName(fmt.Sprint("%s", desired.Template.Name))
 
 	if copy.Annotations == nil {
 		copy.Annotations = map[string]string{}
