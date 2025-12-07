@@ -477,12 +477,20 @@ func (s *Scheduler) ReconcilePods() {
 			}
 
 			for _, pod := range pods.Items {
+				if pod.Spec.SchedulerName != s.SchedulerName {
+					continue
+				}
+
 				if _, hasLimit := pod.Annotations["proxima-scheduler/max-latency-ms"]; hasLimit {
 					s.handlePodReconciliation(pod, nodeScores, edgeToLatencies, clusterName, clientset)
 				}
 			}
 
 			for _, pod := range pods.Items {
+				if pod.Spec.SchedulerName != s.SchedulerName {
+					continue
+				}
+
 				if _, hasLimit := pod.Annotations["proxima-scheduler/max-latency-ms"]; !hasLimit {
 					s.handlePodReconciliation(pod, nodeScores, edgeToLatencies, clusterName, clientset)
 				}
