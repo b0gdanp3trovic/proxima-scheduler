@@ -89,6 +89,9 @@ func NewScheduler(
 func (s *Scheduler) Run() {
 	log.Printf("Clientsets: %v", s.Clientsets)
 	for clusterName, clientset := range s.Clientsets {
+		if clusterName != "local" {
+			continue
+		}
 		for _, ns := range s.IncludedNamespaces {
 			go func(clusterName, namespace string, clientset *kubernetes.Clientset) {
 				log.Printf("Watching pods in namespace %s on cluster %s\n", namespace, clusterName)
