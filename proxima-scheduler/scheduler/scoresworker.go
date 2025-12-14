@@ -133,7 +133,10 @@ func (sw *ScoresWorker) scoreNodes() {
 		finalLatency := weightedLatency / weightSums[nodeIP]
 
 		// Sigmoid
-		score := 1.0 / (1.0 + math.Exp(0.01*(finalLatency-Lmin)))
+		mid := (Lmin + Lmax) / 2.0
+		k := 6.0 / (Lmax - Lmin) // adaptive sensitivity
+
+		score := 1.0 / (1.0 + math.Exp(k*(finalLatency-mid)))
 		sw.Scores[nodeIP] = score
 
 		log.Printf("Node %s Score: %.4f\n", nodeIP, sw.Scores[nodeIP])
