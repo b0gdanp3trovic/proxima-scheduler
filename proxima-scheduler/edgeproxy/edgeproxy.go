@@ -60,7 +60,7 @@ type WeightedForwardTarget struct {
 type CachedForwardCandidates struct {
 	candidates []WeightedForwardTarget
 	expiration time.Time
-	index      int // for round-robin
+	refreshing bool
 }
 
 type ResponseRecorder struct {
@@ -236,22 +236,19 @@ func getPodsForService(serviceName, namespace string, cluster string, clientset 
 			continue
 		}
 
-		node, err := clientset.CoreV1().Nodes().Get(context.TODO(), pod.Spec.NodeName, metav1.GetOptions{})
-		if err != nil {
-			log.Printf("Failed to get node info for %s: %v", pod.Spec.NodeName, err)
+		hostIP := pod.Status.HostIP
+		if hostIP == "" {
 			continue
 		}
 
-		nodeIP, err := util.GetNodeInternalIP(node)
-		if err != nil {
-			log.Printf("No internal IP found for node %s", node.Name)
+		if len(pod.Spec.Containers) == 0 || len(pod.Spec.Containers[0].Ports) == 0 {
 			continue
 		}
 
 		results = append(results, K8sPodInstance{
 			PodIP:   pod.Status.PodIP,
 			Node:    pod.Spec.NodeName,
-			NodeIP:  nodeIP,
+			NodeIP:  hostIP,
 			PodName: pod.Name,
 			Port:    pod.Spec.Containers[0].Ports[0].ContainerPort,
 			Cluster: cluster,
@@ -261,40 +258,31 @@ func getPodsForService(serviceName, namespace string, cluster string, clientset 
 	return results, nil
 }
 
-func (ep *EdgeProxy) getBestPod(serviceName string) (ForwardTarget, error) {
-	ep.cacheMutex.RLock()
-	cached, found := ep.candidateCache[serviceName]
-	if found && time.Now().Before(cached.expiration) && len(cached.candidates) > 0 {
-		ep.cacheMutex.RUnlock()
-		log.Printf("Returning cached weighted pod for service %s", serviceName)
-		return weightedRandomSelect(cached.candidates), nil
-	}
-	ep.cacheMutex.RUnlock()
-
-	result, err, _ := ep.flightGroup.Do(serviceName, func() (interface{}, error) {
+func (ep *EdgeProxy) refreshCandidates(serviceName string) {
+	// singleflight ensures only 1 refresh per service at a time across goroutines
+	_, err, _ := ep.flightGroup.Do("refresh:"+serviceName, func() (interface{}, error) {
+		// --- build weightedTargets exactly like you do today ---
 		var potentialPods []K8sPodInstance
 		for clusterName, clientset := range ep.clientsets {
 			pods, err := getPodsForService(serviceName, ep.namespace, clusterName, clientset)
 			if err != nil {
-				log.Printf("Error retrieving pods from cluster %s: %v", clusterName, err)
 				continue
 			}
 			potentialPods = append(potentialPods, pods...)
 		}
-
 		if len(potentialPods) == 0 {
-			return ForwardTarget{}, fmt.Errorf("No valid pods found for service %s", serviceName)
+			return nil, fmt.Errorf("no pods for %s", serviceName)
 		}
 
 		latenciesByEdge, err := ep.database.GetAverageLatenciesForEdge(ep.ExternalNodeIP)
 		if err != nil {
-			return ForwardTarget{}, fmt.Errorf("failed to retrieve average latencies: %v", err)
+			return nil, err
 		}
 
 		var weightedTargets []WeightedForwardTarget
 		for _, pod := range potentialPods {
-			latency, exists := latenciesByEdge[pod.NodeIP]
-			if !exists || latency <= 0 {
+			latency, ok := latenciesByEdge[pod.NodeIP]
+			if !ok || latency <= 0 {
 				continue
 			}
 
@@ -305,42 +293,69 @@ func (ep *EdgeProxy) getBestPod(serviceName string) (ForwardTarget, error) {
 			} else {
 				remoteProxyUrl, err := util.FindEdgeProxyNodePortAddress(ep.clientsets[pod.Cluster], "proxima-scheduler", "edgeproxy-service")
 				if err != nil || remoteProxyUrl == "" {
-					log.Printf("Skipping pod on cluster %s due to missing proxy: %v", pod.Cluster, err)
 					continue
 				}
 				target.ForwardHost = fmt.Sprintf("%s:30080", remoteProxyUrl)
 				target.UseProxy = true
 			}
 
-			weight := 1.0 / latency
-			log.Printf("Weight for %s is %f", target.ForwardHost, weight)
 			weightedTargets = append(weightedTargets, WeightedForwardTarget{
 				Target: target,
-				Weight: weight,
+				Weight: 1.0 / latency,
 			})
 		}
 
 		if len(weightedTargets) == 0 {
-			return ForwardTarget{}, fmt.Errorf("No valid weighted targets found for service %s", serviceName)
+			return nil, fmt.Errorf("no weighted targets for %s", serviceName)
 		}
 
 		ep.cacheMutex.Lock()
 		ep.candidateCache[serviceName] = CachedForwardCandidates{
 			candidates: weightedTargets,
 			expiration: time.Now().Add(ep.cacheDuration),
+			refreshing: false,
 		}
 		ep.cacheMutex.Unlock()
 
-		log.Printf("Selected and cached %d candidates for service %s", len(weightedTargets), serviceName)
-		return weightedTargets, nil
+		return nil, nil
 	})
 
 	if err != nil {
-		return ForwardTarget{}, err
+		ep.cacheMutex.Lock()
+		cached := ep.candidateCache[serviceName]
+		cached.refreshing = false
+		ep.candidateCache[serviceName] = cached
+		ep.cacheMutex.Unlock()
+	}
+}
+
+func (ep *EdgeProxy) getBestPod(serviceName string) (ForwardTarget, error) {
+	ep.cacheMutex.Lock()
+	cached, found := ep.candidateCache[serviceName]
+
+	if found && len(cached.candidates) > 0 {
+		expired := time.Now().After(cached.expiration)
+		if expired && !cached.refreshing {
+			cached.refreshing = true
+			ep.candidateCache[serviceName] = cached
+			go ep.refreshCandidates(serviceName)
+		}
+		ep.cacheMutex.Unlock()
+		return weightedRandomSelect(cached.candidates), nil
 	}
 
-	candidates := result.([]WeightedForwardTarget)
-	return weightedRandomSelect(candidates), nil
+	ep.cacheMutex.Unlock()
+
+	ep.refreshCandidates(serviceName)
+
+	ep.cacheMutex.RLock()
+	cached, found = ep.candidateCache[serviceName]
+	ep.cacheMutex.RUnlock()
+
+	if !found || len(cached.candidates) == 0 {
+		return ForwardTarget{}, fmt.Errorf("no candidates available for %s", serviceName)
+	}
+	return weightedRandomSelect(cached.candidates), nil
 }
 
 func weightedRandomSelect(pods []WeightedForwardTarget) ForwardTarget {
@@ -361,7 +376,7 @@ func weightedRandomSelect(pods []WeightedForwardTarget) ForwardTarget {
 }
 
 func getLatencyForNode(nodeIP string, averageLatencies map[string]float64) (float64, error) {
-	log.Printf("Avg latencies: %v", averageLatencies)
+	//log.Printf("Avg latencies: %v", averageLatencies)
 	latency, exists := averageLatencies[nodeIP]
 	if !exists {
 		return 0, fmt.Errorf("latency data not found for node %s", nodeIP)
@@ -387,7 +402,7 @@ func preprocessRequest(ep *EdgeProxy) http.Handler {
 		// Select best pod
 		target, err := ep.getBestPod(serviceName)
 		if err != nil {
-			log.Printf("Failed obtaining the best pod: %v", err)
+			//log.Printf("Failed obtaining the best pod: %v", err)
 			http.Error(w, "Failed obtaining the best pod.", http.StatusInternalServerError)
 			return
 		}
@@ -405,7 +420,7 @@ func preprocessRequest(ep *EdgeProxy) http.Handler {
 		}
 
 		recorder := &ResponseRecorder{ResponseWriter: w, statusCode: http.StatusOK}
-		log.Printf("Forwarding request to %s (via proxy: %v)", target.ForwardHost, target.UseProxy)
+		//log.Printf("Forwarding request to %s (via proxy: %v)", target.ForwardHost, target.UseProxy)
 		ep.proxy.ServeHTTP(recorder, r.WithContext(ctx))
 	})
 
