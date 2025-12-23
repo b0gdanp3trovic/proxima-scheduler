@@ -275,12 +275,36 @@ func (s *Scheduler) reschedulePod(
 		return
 	}
 
+	app := pod.Labels["app"]
+	if app != "" {
+		if desired, ok := s.DesiredApps[app]; ok && desired != nil {
+			delete(desired.PodsByName, pod.Name)
+			desired.PodsByName[newPod.Name] = &DesiredPod{
+				Name:     newPod.Name,
+				Cluster:  bestCluster,
+				NodeName: nodeName,
+			}
+		}
+	}
+
 	err = clientset.CoreV1().Pods(pod.Namespace).Delete(context.TODO(), pod.Name, metav1.DeleteOptions{})
 	if err != nil {
 		log.Printf("Failed to delete original pod %s: %v", pod.Name, err)
-	} else {
-		log.Printf("Rescheduled pod %s to node %s (%s)", pod.Name, nodeName, bestCluster)
+
+		if app != "" {
+			if desired, ok := s.DesiredApps[app]; ok && desired != nil {
+				delete(desired.PodsByName, newPod.Name)
+				desired.PodsByName[pod.Name] = &DesiredPod{
+					Name:     pod.Name,
+					Cluster:  currentCluster,
+					NodeName: pod.Spec.NodeName,
+				}
+			}
+		}
+		return
 	}
+
+	log.Printf("Rescheduled pod %s -> %s on node %s (%s)", pod.Name, newPod.Name, nodeName, bestCluster)
 }
 
 func (s *Scheduler) EnforceDesired() {
