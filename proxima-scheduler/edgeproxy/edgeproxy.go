@@ -130,7 +130,7 @@ func NewEdgeProxy(
 		rrIndex:        make(map[string]int),
 		NodeIP:         nodeIP,
 		ExternalNodeIP: externalNodeIP,
-		namespace:      "default",
+		namespace:      "default-proxima",
 		kindNetworkIP:  kindNetworkIP,
 		flightGroup:    singleflight.Group{},
 	}
@@ -259,9 +259,7 @@ func getPodsForService(serviceName, namespace string, cluster string, clientset 
 }
 
 func (ep *EdgeProxy) refreshCandidates(serviceName string) {
-	// singleflight ensures only 1 refresh per service at a time across goroutines
 	_, err, _ := ep.flightGroup.Do("refresh:"+serviceName, func() (interface{}, error) {
-		// --- build weightedTargets exactly like you do today ---
 		var potentialPods []K8sPodInstance
 		for clusterName, clientset := range ep.clientsets {
 			pods, err := getPodsForService(serviceName, ep.namespace, clusterName, clientset)
