@@ -21,21 +21,24 @@ import (
 )
 
 type EdgeProxy struct {
-	proxy          *httputil.ReverseProxy
-	consulAddress  string
-	database       util.Database
-	cacheMutex     sync.RWMutex
-	cacheDuration  time.Duration
-	candidateCache map[string]CachedForwardCandidates
-	rrIndex        map[string]int
-	NodeIP         string
-	ExternalNodeIP string
-	requestCounts  map[string]int
-	requestMutex   sync.Mutex
-	clientsets     map[string]*kubernetes.Clientset
-	namespace      string
-	kindNetworkIP  string
-	flightGroup    singleflight.Group
+	proxy           *httputil.ReverseProxy
+	consulAddress   string
+	database        util.Database
+	cacheMutex      sync.RWMutex
+	cacheDuration   time.Duration
+	candidateCache  map[string]CachedForwardCandidates
+	rrIndex         map[string]int
+	NodeIP          string
+	ExternalNodeIP  string
+	requestCounts   map[string]int
+	requestMutex    sync.Mutex
+	clientsets      map[string]*kubernetes.Clientset
+	namespace       string
+	kindNetworkIP   string
+	flightGroup     singleflight.Group
+	storeMu         sync.Mutex
+	store           map[string]CachedForwardCandidates
+	refreshInterval time.Duration
 }
 
 type K8sPodInstance struct {
@@ -122,17 +125,19 @@ func NewEdgeProxy(
 	}
 
 	ep := &EdgeProxy{
-		clientsets:     clientsets,
-		consulAddress:  consulAddress,
-		database:       db,
-		cacheDuration:  cacheDuration,
-		candidateCache: make(map[string]CachedForwardCandidates),
-		rrIndex:        make(map[string]int),
-		NodeIP:         nodeIP,
-		ExternalNodeIP: externalNodeIP,
-		namespace:      "default-proxima",
-		kindNetworkIP:  kindNetworkIP,
-		flightGroup:    singleflight.Group{},
+		clientsets:      clientsets,
+		consulAddress:   consulAddress,
+		database:        db,
+		cacheDuration:   cacheDuration,
+		candidateCache:  make(map[string]CachedForwardCandidates),
+		rrIndex:         make(map[string]int),
+		NodeIP:          nodeIP,
+		ExternalNodeIP:  externalNodeIP,
+		namespace:       "default-proxima",
+		store:           make(map[string]CachedForwardCandidates),
+		refreshInterval: 2 * time.Second, // tune
+		kindNetworkIP:   kindNetworkIP,
+		flightGroup:     singleflight.Group{},
 	}
 
 	ep.proxy = &httputil.ReverseProxy{
@@ -203,10 +208,8 @@ func NewEdgeProxy(
 				log.Printf("[ERROR] Proxy error to %s (%s): %v", targetURL, serviceName, err)
 			}
 
-			if serviceName != "" &&
-				!errors.Is(err, context.Canceled) &&
-				!errors.Is(err, context.DeadlineExceeded) {
-				ep.invalidateCache(serviceName)
+			if serviceName != "" && !errors.Is(err, context.Canceled) {
+				go ep.refreshCandidates(serviceName)
 			}
 
 			http.Error(w, msg, status)
@@ -307,13 +310,13 @@ func (ep *EdgeProxy) refreshCandidates(serviceName string) {
 			return nil, fmt.Errorf("no weighted targets for %s", serviceName)
 		}
 
-		ep.cacheMutex.Lock()
-		ep.candidateCache[serviceName] = CachedForwardCandidates{
+		ep.storeMu.Lock()
+		ep.store[serviceName] = CachedForwardCandidates{
 			candidates: weightedTargets,
-			expiration: time.Now().Add(ep.cacheDuration),
+			expiration: time.Time{},
 			refreshing: false,
 		}
-		ep.cacheMutex.Unlock()
+		ep.storeMu.Unlock()
 
 		return nil, nil
 	})
@@ -328,27 +331,9 @@ func (ep *EdgeProxy) refreshCandidates(serviceName string) {
 }
 
 func (ep *EdgeProxy) getBestPod(serviceName string) (ForwardTarget, error) {
-	ep.cacheMutex.Lock()
-	cached, found := ep.candidateCache[serviceName]
-
-	if found && len(cached.candidates) > 0 {
-		expired := time.Now().After(cached.expiration)
-		if expired && !cached.refreshing {
-			cached.refreshing = true
-			ep.candidateCache[serviceName] = cached
-			go ep.refreshCandidates(serviceName)
-		}
-		ep.cacheMutex.Unlock()
-		return weightedRandomSelect(cached.candidates), nil
-	}
-
-	ep.cacheMutex.Unlock()
-
-	ep.refreshCandidates(serviceName)
-
-	ep.cacheMutex.RLock()
-	cached, found = ep.candidateCache[serviceName]
-	ep.cacheMutex.RUnlock()
+	ep.storeMu.Lock()
+	cached, found := ep.store[serviceName]
+	ep.storeMu.Unlock()
 
 	if !found || len(cached.candidates) == 0 {
 		return ForwardTarget{}, fmt.Errorf("no candidates available for %s", serviceName)
@@ -380,6 +365,21 @@ func getLatencyForNode(nodeIP string, averageLatencies map[string]float64) (floa
 		return 0, fmt.Errorf("latency data not found for node %s", nodeIP)
 	}
 	return latency, nil
+}
+
+func (ep *EdgeProxy) backgroundRefresh() {
+	for svc := range allowedServices {
+		ep.refreshCandidates(svc)
+	}
+
+	ticker := time.NewTicker(ep.refreshInterval)
+	defer ticker.Stop()
+
+	for range ticker.C {
+		for svc := range allowedServices {
+			go ep.refreshCandidates(svc)
+		}
+	}
 }
 
 func preprocessRequest(ep *EdgeProxy) http.Handler {
@@ -448,6 +448,8 @@ func (ep *EdgeProxy) Run() {
 			log.Printf("Manually invalidated cache for service: %s", service)
 			w.WriteHeader(http.StatusOK)
 		})
+
+		go ep.backgroundRefresh()
 
 		err := http.ListenAndServe(":8080", nil)
 		if err != nil {
