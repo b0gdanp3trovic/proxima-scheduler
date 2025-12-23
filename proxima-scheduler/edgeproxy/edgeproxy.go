@@ -412,6 +412,7 @@ func preprocessRequest(ep *EdgeProxy) http.Handler {
 		ctx = context.WithValue(ctx, "service_name", serviceName)
 
 		if target.UseProxy {
+			r.URL.Path = "/" + serviceName + r.URL.Path
 			r.Header.Set("X-Proxima-Forwarded", "true")
 			ctx = context.WithValue(ctx, "is_first_proxy", true)
 		}
