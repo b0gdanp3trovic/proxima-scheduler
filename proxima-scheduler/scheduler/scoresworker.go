@@ -134,7 +134,7 @@ func (sw *ScoresWorker) scoreNodes() {
 
 		// Sigmoid
 		mid := (Lmin + Lmax) / 2.0
-		k := 6.0 / (Lmax - Lmin) // adaptive sensitivity
+		k := 2 / (Lmax - Lmin) // adaptive sensitivity
 
 		score := 1.0 / (1.0 + math.Exp(k*(finalLatency-mid)))
 		sw.Scores[nodeIP] = score
