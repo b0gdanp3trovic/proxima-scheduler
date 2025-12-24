@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"math/rand"
+	"net"
 	"net/http"
 	"net/http/httputil"
 	"strings"
@@ -141,6 +142,7 @@ func NewEdgeProxy(
 	}
 
 	ep.proxy = &httputil.ReverseProxy{
+		Transport: fastTransport(),
 		Director: func(req *http.Request) {
 			targetUrl := req.Context().Value("target_url").(string)
 
@@ -217,6 +219,24 @@ func NewEdgeProxy(
 	}
 
 	return ep, nil
+}
+
+func fastTransport() *http.Transport {
+	d := &net.Dialer{
+		Timeout:   250 * time.Millisecond,
+		KeepAlive: 30 * time.Second,
+	}
+
+	return &http.Transport{
+		Proxy:                 http.ProxyFromEnvironment,
+		DialContext:           d.DialContext,
+		ForceAttemptHTTP2:     false,
+		MaxIdleConns:          100,
+		IdleConnTimeout:       30 * time.Second,
+		TLSHandshakeTimeout:   250 * time.Millisecond,
+		ResponseHeaderTimeout: 400 * time.Millisecond,
+		ExpectContinueTimeout: 100 * time.Millisecond,
+	}
 }
 
 func getPodsForService(serviceName, namespace string, cluster string, clientset *kubernetes.Clientset) ([]K8sPodInstance, error) {
