@@ -223,7 +223,7 @@ func NewEdgeProxy(
 
 func fastTransport() *http.Transport {
 	d := &net.Dialer{
-		Timeout:   250 * time.Millisecond,
+		Timeout:   2 * time.Second,
 		KeepAlive: 30 * time.Second,
 	}
 
@@ -231,11 +231,12 @@ func fastTransport() *http.Transport {
 		Proxy:                 http.ProxyFromEnvironment,
 		DialContext:           d.DialContext,
 		ForceAttemptHTTP2:     false,
-		MaxIdleConns:          100,
-		IdleConnTimeout:       30 * time.Second,
-		TLSHandshakeTimeout:   250 * time.Millisecond,
-		ResponseHeaderTimeout: 400 * time.Millisecond,
-		ExpectContinueTimeout: 100 * time.Millisecond,
+		MaxIdleConns:          200,
+		MaxIdleConnsPerHost:   100,
+		IdleConnTimeout:       60 * time.Second,
+		TLSHandshakeTimeout:   2 * time.Second,
+		ResponseHeaderTimeout: 5 * time.Second,
+		ExpectContinueTimeout: 1 * time.Second,
 	}
 }
 
